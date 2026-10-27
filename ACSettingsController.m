@@ -67,7 +67,7 @@
                 cell.detailTextLabel.text = tg.online ? @"Połączono z Telegramem" : @"Łączenie…";
             } else {
                 cell.textLabel.text = @"Zaloguj się do Telegrama";
-                cell.detailTextLabel.text = @"Okno setup: api_id, api_hash, numer telefonu i kod";
+                cell.detailTextLabel.text = @"Numer telefonu i kod z SMS-a";
                 cell.accessoryType = UITableViewCellAccessoryDisclosureIndicator;
             }
         } else if (ip.row == 1) {
@@ -79,7 +79,7 @@
             cell.detailTextLabel.text = @"Usuwa sesję z tego telefonu";
         }
     } else if (ip.row == 0) {
-        cell.textLabel.text = @"AeroChat 0.3.0";
+        cell.textLabel.text = @"AeroChat 0.4.0";
         cell.detailTextLabel.text = @"Klient Telegrama: czaty, historia, wysyłanie, wyszukiwanie";
         cell.selectionStyle = UITableViewCellSelectionStyleNone;
     } else {

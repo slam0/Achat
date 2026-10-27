@@ -1,6 +1,6 @@
 #import <UIKit/UIKit.h>
 
-/* Okno logowania do Telegrama: klucze api_id / api_hash i numer telefonu -> kod -> (hasło 2FA). */
-@interface ACSetupController : UIViewController <UITextFieldDelegate>
+/* Konfiguracja w stylu asystenta iOS 5/6: ekran powitalny z suwakiem, potem numer telefonu -> kod -> (hasło 2FA) -> gotowe. */
+@interface ACSetupController : NSObject
 + (void)presentFrom:(UIViewController *)host;
 @end

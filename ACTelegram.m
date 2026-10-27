@@ -1,5 +1,6 @@
 #import "ACTelegram.h"
 #import "ACStore.h"
+#import "ACConfig.h"
 #import <UIKit/UIKit.h>
 #include <time.h>
 #include <string.h>
@@ -194,8 +195,14 @@ static void cbClosed(void *ud, const char *why)
 - (BOOL)live { return _authorized; }
 - (BOOL)online { return _connOK; }
 
-- (int)apiId { return [[[ACStore shared] objectForKey:@"tg.apiId"] intValue]; }
-- (NSString *)apiHash { NSString *h = [[ACStore shared] objectForKey:@"tg.apiHash"]; return h ? h : @""; }
+- (BOOL)builtInKeys { return AC_TG_API_ID > 0 && strlen(AC_TG_API_HASH) >= 16; }
+- (int)apiId { return self.builtInKeys ? AC_TG_API_ID : [[[ACStore shared] objectForKey:@"tg.apiId"] intValue]; }
+- (NSString *)apiHash
+{
+    if (self.builtInKeys) return [NSString stringWithUTF8String:AC_TG_API_HASH];
+    NSString *h = [[ACStore shared] objectForKey:@"tg.apiHash"];
+    return h ? h : @"";
+}
 - (BOOL)hasCredentials { return self.apiId > 0 && [self.apiHash length] >= 8; }
 
 - (void)saveApiId:(int)apiId apiHash:(NSString *)apiHash
@@ -493,7 +500,7 @@ static NSString *DCFallbackIP(int dc)
                     [NSNumber numberWithInt:self.apiId], @"api_id",
                     [dev model], @"device_model",
                     [dev systemVersion], @"system_version",
-                    @"0.3.0", @"app_version",
+                    @"0.4.0", @"app_version",
                     @"pl", @"system_lang_code",
                     @"", @"lang_pack",
                     @"pl", @"lang_code",

@@ -1,9 +1,25 @@
-# AeroChat 0.3.0 (klient Telegrama)
+# AeroChat 0.4.0 (klient Telegrama, setup jak w iOS 5/6)
 
 Klient komunikatora w stylu iOS 6 dla jailbreakowanego iPhone'a (armv7). Łączy się z Telegramem
 własnym, napisanym od zera klientem MTProto 2.0 (oficjalnie dozwolone klienty firm trzecich).
 
-## Co nowego w 0.3.0
+## Co nowego w 0.4.0
+- **Motyw "iOS 6 Len"**: ciemnoszary len z ekranu konfiguracji iOS 6 (tło bierzemy z systemowego koloru UIKit,
+  własny wzór jest tylko zapasem), grafitowe wiersze i paski.
+- **Nowy ekran setup w stylu asystenta iOS 5/6**: powitanie z dużym napisem i suwakiem "przesuń, aby skonfigurować",
+  potem grupowane tabele na lnie: numer telefonu, kod, hasło (jeśli konto je ma), na końcu ekran "Gotowe".
+- **Logowanie samym numerem telefonu**: klucze `api_id` / `api_hash` są wbudowane w aplikację przy budowaniu,
+  więc użytkownik ich nie widzi. Telegram wymaga ich od każdego klienta, więc założ je JEDEN RAZ (poniżej).
+  Gdy klucze nie są wbudowane, okno setup pokazuje dodatkową sekcję na ich wpisanie.
+
+### Wbudowanie kluczy (raz, w repozytorium GitHub)
+1. my.telegram.org → "API development tools" → utwórz aplikację → skopiuj `api_id` i `api_hash`.
+2. Repozytorium → Settings → Secrets and variables → Actions → New repository secret:
+   `TG_API_ID` (liczba) i `TG_API_HASH` (32 znaki).
+3. Actions → Run workflow. Workflow sam tworzy `ACConfigLocal.h` (jest w `.gitignore`).
+Uwaga: klucze trafiają do pliku .deb, więc nie udostępniaj go publicznie, jeśli nie chcesz ich ujawniać.
+
+## Zmiany w 0.3.0
 - **Okno setup** (pokazuje się przy pierwszym uruchomieniu, potem w Ustawienia → Telegram):
   1. klucze `api_id` i `api_hash` z my.telegram.org,
   2. numer telefonu (np. `+48 600 123 456`; 9 cyfr bez kierunkowego = Polska),

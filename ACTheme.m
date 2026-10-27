@@ -6,7 +6,8 @@ NSString *const ACAppearanceDidChangeNotification = @"ACAppearanceDidChangeNotif
 
 /* ---------- paleta i motywy ---------- */
 
-#define NTHEMES 8
+#define NTHEMES 9
+#define THEME_LINEN 8
 
 /* aero: 0 zwykły, 1 szkło Aero z niebem. metal: 0 zwykły, 1 szczotkowany metal (z przebarwieniem tint).
    Motyw jasny bez metalu i Aero to klasyczny szary iPhone (iOS 6). W ciemnych motywach tintPct przebarwia grafit kolorem akcentu. */
@@ -30,6 +31,7 @@ static const ACThemeDef kThemes[NTHEMES] = {
     { @"Różowe złoto",   @"Metal",      { 206,  80, 102 }, 1, 1, 0, { 230, 152, 142 }, 42, {0} },
     { @"Frutiger Aero",  @"Szkło",      {  30, 130, 205 }, 1, 0, 1, {0,0,0}, 0,
       { 70, 140, 200,   150, 196, 230,   226, 240, 250,   120, 176, 140,   66, 128, 92 } },
+    { @"iOS 6 Len",      @"Ciemny len", { 110, 172, 240 }, 0, 0, 0, {0,0,0}, 0, {0} },
 };
 
 static ACPalette gPal;
@@ -154,6 +156,22 @@ static void BuildPalette(NSInteger theme, ACPalette *p)
     } else {
         SET(p->plateT, 98, 102, 112); SET(p->plateM, 70, 73, 81); SET(p->plateB, 46, 48, 54);
         SET(p->chromeText, 255, 255, 255);
+    }
+    if (theme == THEME_LINEN) {
+        /* ekran konfiguracji iOS 6: ciemnoszary len, grafitowe wiersze i paski */
+        p->linen = 1;
+        SET(p->bg, 96, 98, 101); SET(p->bgHi, 104, 106, 109); SET(p->bgLo, 84, 86, 89);
+        SET(p->barT1, 112, 115, 120); SET(p->barT2, 76, 79, 84); SET(p->barB1, 52, 54, 58); SET(p->barB2, 30, 31, 34);
+        SET(p->barTint, 64, 66, 71);
+        SET(p->cellT1, 80, 82, 86); SET(p->cellT2, 70, 72, 76); SET(p->cellB1, 60, 62, 66); SET(p->cellB2, 54, 56, 60);
+        SET(p->text, 242, 243, 245); SET(p->subtle, 176, 180, 186); SET(p->tabOff, 164, 168, 174);
+        SET(p->hdrT, 76, 79, 84); SET(p->hdrB, 54, 56, 60); SET(p->hdrRight, 176, 180, 186);
+        SET(p->fieldT, 22, 23, 26); SET(p->fieldB, 44, 46, 50); SET(p->fieldText, 255, 255, 255);
+        SET(p->panelT, 40, 42, 45); SET(p->panelB, 58, 60, 64);
+        SET(p->sep, 40, 41, 44);
+        SET(p->neutT, 124, 127, 132); SET(p->neutB, 60, 62, 66); SET(p->neutBorder, 22, 23, 26);
+        SET(p->chrome, 42, 44, 48);
+        p->cellHiAlpha = 0.16f; p->cellLoAlpha = 0.45f;
     }
     Mix(p->accentGelT, p->accent, white, 0.25f);
     Mix(p->accentGelB, p->accent, black, 0.18f);
@@ -349,10 +367,73 @@ static UIImage *AeroSkyImage(CGSize size)
     return img;
 }
 
+/* ---------- len (ekran konfiguracji iOS 6) ---------- */
+
+UIColor *ACLinenColor(void)
+{
+    static UIColor *c;
+    if (c) return c;
+    /* prawdziwy len z zasobów systemu (iOS 6 trzyma go w UIKit); własny rysunek poniżej to tylko zapas */
+    SEL sel = NSSelectorFromString(@"scrollViewTexturedBackgroundColor");
+    if ([UIColor respondsToSelector:sel]) {
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Warc-performSelector-leaks"
+        UIColor *sys = [UIColor performSelector:sel];
+#pragma clang diagnostic pop
+        if (sys) { c = sys; return c; }
+    }
+    const int N = 64;
+    CGFloat sc = [[UIScreen mainScreen] scale];
+    CGFloat u = sc > 1.5f ? 0.5f : 1.0f;                 /* jedno ziarno = jeden piksel ekranu */
+    int cells = sc > 1.5f ? N * 2 : N;
+    UIGraphicsBeginImageContextWithOptions(CGSizeMake(N, N), YES, 0.0f);
+    [RGBA(96, 98, 101, 1) setFill];
+    UIRectFill(CGRectMake(0, 0, N, N));
+    unsigned int seed = 2463534242u;
+    for (int axis = 0; axis < 2; axis++) {
+        for (int i = 0; i < cells; i++) {
+            seed = seed * 1664525u + 1013904223u;
+            int d = (int)((seed >> 16) & 63) - 32;           /* -32..31 */
+            int a = d < 0 ? -d : d;
+            CGFloat alpha = (axis == 0 ? a / 230.0f : a / 1100.0f);   /* prawie same pionowe nitki */
+            [(d < 0 ? RGBA(0, 0, 0, alpha) : RGBA(255, 255, 255, alpha)) setFill];
+            if (axis == 0) UIRectFillUsingBlendMode(CGRectMake(i * u, 0, u, N), kCGBlendModeNormal);
+            else UIRectFillUsingBlendMode(CGRectMake(0, i * u, N, u), kCGBlendModeNormal);
+        }
+    }
+    UIImage *tile = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
+    c = [UIColor colorWithPatternImage:tile];
+    return c;
+}
+
+UIView *ACLinenBackgroundView(CGRect frame)
+{
+    static UIImage *shade;
+    if (!shade) {
+        UIGraphicsBeginImageContextWithOptions(CGSizeMake(2, 256), NO, 1.0f);
+        CGContextRef c = UIGraphicsGetCurrentContext();
+        Fill(c, CGRectMake(0, 0, 2, 90), RGBA(0, 0, 0, 0.40f), RGBA(0, 0, 0, 0.0f));
+        Fill(c, CGRectMake(0, 90, 2, 90), RGBA(0, 0, 0, 0.0f), RGBA(0, 0, 0, 0.0f));
+        Fill(c, CGRectMake(0, 180, 2, 76), RGBA(0, 0, 0, 0.0f), RGBA(0, 0, 0, 0.34f));
+        shade = [UIGraphicsGetImageFromCurrentImageContext() resizableImageWithCapInsets:UIEdgeInsetsMake(40, 0, 40, 0)];
+        UIGraphicsEndImageContext();
+    }
+    UIView *v = [[UIView alloc] initWithFrame:frame];
+    v.backgroundColor = ACLinenColor();
+    v.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    UIImageView *iv = [[UIImageView alloc] initWithFrame:v.bounds];
+    iv.image = shade;
+    iv.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleHeight;
+    [v addSubview:iv];
+    return v;
+}
+
 /* Tło: teksturowane, delikatne poziome "szczotkowane" linie (metal) albo prążki (grafit). */
 UIColor *ACBackgroundColor(void)
 {
     NSInteger t = ACCurrentTheme();
+    if (!gBgCache[t] && ACP()->linen) gBgCache[t] = ACLinenColor();
     if (!gBgCache[t] && ACP()->metal) {
         const ACPalette *p = ACP();
         UIGraphicsBeginImageContextWithOptions(CGSizeMake(192, 96), YES, 0.0f);
@@ -395,6 +476,7 @@ UIColor *ACBackgroundColor(void)
 
 UIView *ACBackgroundView(CGRect frame)
 {
+    if (ACP()->linen) return ACLinenBackgroundView(frame);
     if (ACP()->aero) {
         NSInteger t = ACCurrentTheme();
         CGSize screen = [[UIScreen mainScreen] bounds].size;

@@ -35,6 +35,7 @@ typedef enum {
 @property (nonatomic, readonly) int apiId;
 @property (nonatomic, readonly, copy) NSString *apiHash;
 @property (nonatomic, readonly) BOOL hasCredentials;
+@property (nonatomic, readonly) BOOL builtInKeys;                  /* klucze wbudowane w aplikację przy budowaniu */
 - (void)saveApiId:(int)apiId apiHash:(NSString *)apiHash;
 
 /* logowanie */

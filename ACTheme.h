@@ -28,6 +28,7 @@ typedef struct {
     int metal;                                  /* 1 = szczotkowany metal */
     int aero;                                   /* 1 = szkło Aero z niebem */
     int classic;                                /* 1 = klasyczny szary iPhone (iOS 6) */
+    int linen;                                  /* 1 = ciemny len z ekranu konfiguracji iOS 6 */
 } ACPalette;
 
 const ACPalette *ACP(void);
@@ -43,6 +44,8 @@ UIImage *ACThemeSwatch(NSInteger index);        /* mała błyszcząca próbka */
 UIActivityIndicatorViewStyle ACSpinnerStyle(void);
 UIColor *ACGlyphColor(void);
 
+UIColor *ACLinenColor(void);                    /* wzór lnu jako kolor-wzorek (niezależnie od motywu) */
+UIView *ACLinenBackgroundView(CGRect frame);    /* len + delikatne przyciemnienie u góry i u dołu */
 UIColor *ACBackgroundColor(void);       /* kolor tła zwykłych tabel (metal, grafit) */
 UIView *ACBackgroundView(CGRect frame); /* widok tła: dla Aero niebo z bąblami, dla reszty tekstura */
 UIColor *ACTextColor(void);
