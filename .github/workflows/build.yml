@@ -1,0 +1,133 @@
+name: Zbuduj AeroChat
+
+# Uruchom ręcznie: zakładka "Actions" -> "Zbuduj AeroChat" -> "Run workflow".
+# Po kilku minutach na dole strony przebiegu pojawi się plik aerochat-deb do pobrania.
+on:
+  workflow_dispatch:
+    inputs:
+      sdk:
+        description: "Wersja SDK iOS (zostaw puste, żeby wybrać automatycznie)"
+        required: false
+        default: ""
+
+permissions:
+  contents: write     # publikacja wydania (Release) z plikiem .deb
+
+jobs:
+  build:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Zainstaluj potrzebne programy
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential fakeroot git curl rsync perl xz-utils libarchive-tools unzip
+
+      - name: Zainstaluj Theos
+        run: |
+          export THEOS="$HOME/theos"
+          bash -c "$(curl -fsSL https://raw.githubusercontent.com/theos/theos/master/bin/install-theos)"
+          echo "THEOS=$HOME/theos" >> "$GITHUB_ENV"
+
+      - name: Pobierz SDK iOS 9.3 (starsze SDK potrzebne dla iOS 6)
+        run: |
+          git lfs install
+          git clone --depth 1 --filter=blob:none --sparse https://github.com/xybp888/iOS-SDKs.git "$RUNNER_TEMP/sdkrepo"
+          cd "$RUNNER_TEMP/sdkrepo"
+          git sparse-checkout set iPhoneOS9.3.sdk
+          mv iPhoneOS9.3.sdk "$THEOS/sdks/"
+          du -sh "$THEOS/sdks/iPhoneOS9.3.sdk"
+
+      - name: Uzupełnij brakujące pliki w SDK
+        run: |
+          cat > "$RUNNER_TEMP/fix-sdk.py" <<'PYEOF'
+          import os, re, sys
+          sdk = sys.argv[1]
+          made = []
+          for _ in range(5):                      # powtarzamy, bo zaślepka nie ma własnych zależności, ale dla pewności
+              wanted = set()
+              for root, _d, files in os.walk(sdk):
+                  for f in files:
+                      if not f.endswith(".tbd"):
+                          continue
+                      try:
+                          t = open(os.path.join(root, f), encoding="utf-8", errors="ignore").read()
+                      except OSError:
+                          continue
+                      for m in re.finditer(r"(?:re-exports|libraries):\s*\[([^\]]*)\]", t):
+                          for p in re.split(r"[,\s]+", m.group(1)):
+                              p = p.strip("'\"")
+                              if p.startswith("/"):
+                                  wanted.add(p)
+              new = 0
+              for p in sorted(wanted):
+                  base = p[:-6] if p.endswith(".dylib") else p
+                  if any(os.path.exists(sdk + c) for c in (p, base + ".tbd", p + ".tbd")):
+                      continue
+                  out = sdk + base + ".tbd"
+                  os.makedirs(os.path.dirname(out), exist_ok=True)
+                  open(out, "w").write(
+                      "--- !tapi-tbd-v2\n"
+                      "archs:           [ armv7, armv7s, arm64 ]\n"
+                      "platform:        ios\n"
+                      "install-name:    " + p + "\n"
+                      "current-version: 1\n"
+                      "compatibility-version: 1\n"
+                      "exports:\n"
+                      "  - archs:           [ armv7, armv7s, arm64 ]\n"
+                      "    symbols:         [ ]\n"
+                      "...\n")
+                  made.append(p); new += 1
+              if not new:
+                  break
+          print("Dodano zaślepek:", len(made))
+          for p in made: print("  ", p)
+          PYEOF
+          python3 -I "$RUNNER_TEMP/fix-sdk.py" "$THEOS/sdks/iPhoneOS9.3.sdk"
+
+      - name: Pokaż dostępne SDK
+        run: ls "$THEOS/sdks" || true
+
+      - name: Zbuduj
+        env:
+          SDKVER: ${{ github.event.inputs.sdk }}
+        run: |
+          chmod +x build.sh
+          chmod 755 layout/DEBIAN/postinst
+          ./build.sh
+
+      - name: Złóż plik .ipa (do instalacji przez iTunes z AppSync)
+        continue-on-error: true
+        run: |
+          APP=$(find .theos/_ -maxdepth 3 -name '*.app' -type d | head -1)
+          echo "Znaleziono: $APP"
+          test -n "$APP"
+          rm -rf ipa && mkdir -p ipa/Payload
+          cp -R "$APP" ipa/Payload/
+          (cd ipa && zip -qry AeroChat.ipa Payload)
+          ls -la ipa
+
+      - name: Zapisz plik .ipa
+        uses: actions/upload-artifact@v4
+        with:
+          name: aerochat-ipa
+          path: ipa/AeroChat.ipa
+          if-no-files-found: warn
+
+      - name: Zapisz plik .deb
+        uses: actions/upload-artifact@v4
+        with:
+          name: aerochat-deb
+          path: packages/*.deb
+
+      - name: Opublikuj wydanie (stały adres do pobrania na stronie)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          FILES=$(ls packages/*.deb ipa/AeroChat.ipa 2>/dev/null || true)
+          test -n "$FILES"
+          VER=$(grep -E '^Version:' control | head -1 | cut -d' ' -f2)
+          gh release delete najnowsza -R "$GITHUB_REPOSITORY" --cleanup-tag -y || true
+          gh release create najnowsza $FILES -R "$GITHUB_REPOSITORY" --target "$GITHUB_SHA" \
+            --title "AeroChat $VER" --notes "Ostatnia zbudowana wersja aplikacji ($VER). Pobieraj ze strony projektu."
