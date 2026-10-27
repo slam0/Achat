@@ -41,5 +41,6 @@ void acg_pull_playout(acg *g, int16_t *pcm, int n);                             
 void acg_set_log(acg_log_cb cb);
 /* jednowierszowe podsumowanie diagnostyczne */
 void acg_describe(acg *g, char *out, int outlen);
+void acg_short(acg *g, char *out, int outlen);                                      /* krótka linia na ekran rozmowy (zeruje szczyty) */
 
 #endif

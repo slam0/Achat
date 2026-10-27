@@ -143,7 +143,13 @@ static NSString *JSONText(id o)
     if (_state == ACCallActive && !_reconnecting) {
         int sec = _activeSince ? (int)(-[_activeSince timeIntervalSinceNow]) : 0;
         NSString *t = [NSString stringWithFormat:@"%d:%02d", sec / 60, sec % 60];
-        return _peerMuted ? [t stringByAppendingString:@" · rozmówca wyciszony"] : t;
+        if (_peerMuted) t = [t stringByAppendingString:@" · rozmówca wyciszony"];
+        if (_engine) {     /* linia diagnostyczna: pakiety wysłane/odebrane, poziomy mikrofonu i głośnika */
+            char d[160];
+            acg_short(_engine, d, sizeof(d));
+            t = [t stringByAppendingString:[@"\n" stringByAppendingString:[NSString stringWithUTF8String:d] ?: @""]];
+        }
+        return t;
     }
     return _status ?: @"";
 }
@@ -588,7 +594,7 @@ static NSString *ReasonError(NSString *e)
 {
     if (_audio) { [_audio stop]; _audio = nil; }
     if (_engine) {
-        char d[300];
+        char d[900];
         acg_describe(_engine, d, sizeof(d));
         CallLog([@"silnik koniec: " stringByAppendingString:[NSString stringWithUTF8String:d]]);
         acg_free(_engine);
@@ -619,7 +625,7 @@ static NSString *ReasonError(NSString *e)
         _reconnecting = YES;
         [self setState:_state status:@"Łączenie ponownie…"];
     } else if (st == ACG_STATE_FAILED) {
-        char d[300];
+        char d[900];
         acg_describe(_engine, d, sizeof(d));
         CallLog([@"silnik diagnostyka: " stringByAppendingString:[NSString stringWithUTF8String:d]]);
         NSString *m = err == ACG_ERR_TIMEOUT ? @"Nie udało się nawiązać połączenia z rozmówcą (brak odpowiedzi serwera rozmów)." :

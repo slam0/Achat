@@ -1,16 +1,10 @@
-AeroChat 0.7.0 - poprawka (nowy silnik rozmów zgodny z tgcalls 2.7.7)
+AeroChat 0.7.1 - poprawka (linia diagnostyczna dźwięku na ekranie rozmowy)
 
-JAK WGRAĆ NA GITHUB (repo slam0/Achat):
-1. Rozpakuj zip.
-2. Na GitHubie: Add file -> Upload files. Przeciągnij WSZYSTKIE pliki z głównego folderu (ac_tgc.c, ac_tgc.h,
-   ACAudio.h, ACAudio.m, ACCall.h, ACCall.m, ACTelegram.m, ACSettingsController.m, Makefile, control, README.md)
-   - nadpiszą stare. Commit changes.
-3. Plik Resources/Info.plist wgraj osobno do folderu Resources w repo (wejdź w Resources -> Add file -> Upload files).
-4. Actions -> "Zbuduj AeroChat" -> Run workflow (NIE "Re-run all jobs"). Gotowy .deb jest w artefaktach.
+Wgraj tak samo jak poprzednio: pliki z głównego folderu do głównego folderu repo (nadpisz),
+Resources/Info.plist do folderu Resources. Potem Actions -> "Zbuduj AeroChat" -> Run workflow.
+(Makefile i reszta plików bez zmian względem 0.7.0.)
 
-Stary plik ac_voip.c/ac_voip.h może zostać w repo - nie jest już budowany.
-
-UWAGA: aplikacja nie była uruchamiana na prawdziwym telefonie ani sprawdzana z prawdziwą aplikacją Telegrama.
-Silnik przetestowano tylko na komputerze (dwa silniki między sobą i niezależny peer w Pythonie). Pierwsze
-połączenie z tatą może się nie udać. Wtedy wyślij mi plik Documents/aerochat-call.log (Filza -> /var/mobile/
-Applications/<AeroChat>/Documents/aerochat-call.log), a poprawię na jego podstawie.
+Co zrobić po instalacji: zadzwoń, poczekaj kilkanaście sekund, mów do telefonu i zrób zdjęcie/zrzut ekranu
+(przycisk Home + Power) ekranu rozmowy. Pod licznikiem będzie linia:
+  wys N odb N · mik N · gł N · dek N/N
+Wyślij mi ją (albo zrzut ekranu) i napisz, kto kogo słyszy.

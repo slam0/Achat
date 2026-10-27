@@ -674,6 +674,8 @@ struct acg {
     uint32_t n_stun_tx, n_stun_req_rx, n_stun_resp_rx, n_stun_bad, n_stun_err;
     uint32_t n_ec_rx, n_ec_unk, n_rtp_tx, n_rtp_rx, n_rtcp_rx, n_sig_rx, n_sig_tx;
     uint32_t n_dgram_rx, n_dgram_tx, n_lost;
+    uint32_t cap_total, play_total, n_dec_ok, n_dec_err, n_rtp_badpt, n_rtp_badssrc;   /* diagnostyka dźwięku */
+    int cap_peak, play_peak, dec_last_err;
     int remote_ids[16], n_remote_ids;
 };
 
@@ -1086,8 +1088,8 @@ static void handle_rtp(acg *g, const uint8_t *d, int n)
     if (off + pad >= n) return;
     ssrc = rbe32(d + 8);
     ts = rbe32(d + 4);
-    if (pt != RTP_PT_OPUS) { if (g->n_rtp_rx == 0) logf_("RTP: nieoczekiwany typ ladunku %d", pt); return; }
-    if (ssrc != g->in_ssrc && g->n_rtp_rx == 0) logf_("RTP: ssrc %u (oczekiwano %u)", (unsigned)ssrc, (unsigned)g->in_ssrc);
+    if (pt != RTP_PT_OPUS) { g->n_rtp_badpt++; if (g->n_rtp_badpt <= 3) logf_("RTP: nieoczekiwany typ ladunku %d", pt); return; }
+    if (ssrc != g->in_ssrc) { g->n_rtp_badssrc++; if (g->n_rtp_badssrc <= 3) logf_("RTP: ssrc %u (oczekiwano %u)", (unsigned)ssrc, (unsigned)g->in_ssrc); }
     if (!g->rtp_have_first) { g->rtp_have_first = 1; g->rtp_first_ts = ts; logf_("pierwszy pakiet audio od rozmowcy (%d B)", n - off - pad); }
     g->n_rtp_rx++;
     if (tseq >= 0 && g->ntwcc < 128) { g->twcc[g->ntwcc].seq = (uint16_t)tseq; g->twcc[g->ntwcc].t = now; g->ntwcc++; }
@@ -1231,6 +1233,7 @@ static int decode_next(acg *g)
     for (i = 0; i < JB_SIZE; i++) if (g->jb[i].used && g->jb[i].pts == g->next_pts) { best = i; break; }
     if (best >= 0) {
         n = opus_decode(g->dec, g->jb[best].data, g->jb[best].len, pcm, MAX_DEC_SAMPLES, 0);
+        if (n > 0) g->n_dec_ok++; else { g->n_dec_err++; g->dec_last_err = n; }
         g->jb[best].used = 0;
         g->plc_run = 0;
         if (n > 0) { g->last_ms = n * 1000 / ACG_SAMPLE_RATE; g->next_pts += g->last_ms; }
@@ -1388,7 +1391,7 @@ static void *run_thread(void *arg)
         if (g->state == ACG_STATE_FAILED) { usleep(20000); continue; }
         tick(g, now);
         if (now - last_stat >= 5000) {
-            char s[400];
+            char s[900];
             last_stat = now;
             acg_describe(g, s, sizeof(s));
             logf_("%s", s);
@@ -1567,6 +1570,8 @@ void acg_push_capture(acg *g, const int16_t *pcm, int n)
 {
     int i;
     if (!g || g->muted || n <= 0) return;
+    for (i = 0; i < n; i++) { int a = pcm[i] < 0 ? -pcm[i] : pcm[i]; if (a > g->cap_peak) g->cap_peak = a; }
+    g->cap_total += (uint32_t)n;
     pthread_mutex_lock(&g->cap_mx);
     for (i = 0; i < n; i++) g->cap[(g->cap_head + i) % CAP_RING] = pcm[i];
     g->cap_head += n;
@@ -1592,6 +1597,11 @@ void acg_pull_playout(acg *g, int16_t *pcm, int n)
         got += take;
     }
     if (got < n) memset(pcm + got, 0, (size_t)(n - got) * 2);
+    {
+        int i;
+        for (i = 0; i < got; i++) { int a = pcm[i] < 0 ? -pcm[i] : pcm[i]; if (a > g->play_peak) g->play_peak = a; }
+        g->play_total += (uint32_t)n;
+    }
 }
 
 void acg_describe(acg *g, char *out, int outlen)
@@ -1606,4 +1616,19 @@ void acg_describe(acg *g, char *out, int outlen)
              (unsigned)g->n_stun_tx, (unsigned)g->n_stun_req_rx, (unsigned)g->n_stun_resp_rx, (unsigned)g->n_stun_bad,
              (unsigned)g->n_ec_rx, (unsigned)g->ec_t_.n_bad_hash, (unsigned)g->n_ec_unk, (unsigned)g->n_sig_rx, (unsigned)g->n_sig_tx, (unsigned)g->ec_s_.n_bad_hash,
              (unsigned)g->n_rtp_tx, (unsigned)g->n_rtp_rx, (unsigned)g->n_rtcp_rx);
+    {
+        size_t l = strlen(out);
+        if ((int)l < outlen - 1) snprintf(out + l, (size_t)outlen - l, ", mik %u pr / szczyt %d, glosnik %u pr / szczyt %d, dekod ok %u blad %u (%d), zly-pt %u zly-ssrc %u, zgubione %u",
+                 (unsigned)g->cap_total, g->cap_peak, (unsigned)g->play_total, g->play_peak, (unsigned)g->n_dec_ok, (unsigned)g->n_dec_err, g->dec_last_err, (unsigned)g->n_rtp_badpt, (unsigned)g->n_rtp_badssrc, (unsigned)g->n_lost);
+    }
+}
+
+/* krótka linia na ekran rozmowy: pakiety wysłane/odebrane, poziom mikrofonu i głośnika (szczyty od ostatniego odczytu) */
+void acg_short(acg *g, char *out, int outlen)
+{
+    if (!g) { snprintf(out, (size_t)outlen, "-"); return; }
+    snprintf(out, (size_t)outlen, "wys %u odb %u · mik %d · gł %d · dek %u/%u",
+             (unsigned)g->n_rtp_tx, (unsigned)g->n_rtp_rx, g->cap_peak, g->play_peak, (unsigned)g->n_dec_ok, (unsigned)g->n_dec_err);
+    g->cap_peak = 0;
+    g->play_peak = 0;
 }
