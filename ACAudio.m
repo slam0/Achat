@@ -1,5 +1,6 @@
 #import "ACAudio.h"
 #import "ACCrash.h"
+#include "ac_tgc.h"
 #include <AudioToolbox/AudioToolbox.h>
 #include <string.h>
 
@@ -10,34 +11,38 @@
 @end
 
 /* Wskaźnik silnika jest czytany w wątku audio; zerujemy go przed zatrzymaniem urządzenia. */
-static acv *volatile gEngine;
+static void *volatile gEngine;
+static ACAudioPushFn volatile gPush;
+static ACAudioPullFn volatile gPull;
 static AudioUnit gUnit;
 static int16_t gCapBuf[MAX_FRAMES];
 
 static OSStatus CaptureCB(void *ref, AudioUnitRenderActionFlags *flags, const AudioTimeStamp *ts, UInt32 bus, UInt32 frames, AudioBufferList *io)
 {
     AudioBufferList bl;
-    acv *e = gEngine;
+    void *e = gEngine;
+    ACAudioPushFn push = gPush;
     OSStatus st;
-    if (!e || !gUnit || frames == 0 || frames > MAX_FRAMES) return noErr;
+    if (!e || !push || !gUnit || frames == 0 || frames > MAX_FRAMES) return noErr;
     bl.mNumberBuffers = 1;
     bl.mBuffers[0].mNumberChannels = 1;
     bl.mBuffers[0].mDataByteSize = frames * 2;
     bl.mBuffers[0].mData = gCapBuf;
     st = AudioUnitRender(gUnit, flags, ts, 1, frames, &bl);
-    if (st == noErr) acv_push_capture(e, gCapBuf, (int)frames);
+    if (st == noErr) push(e, gCapBuf, (int)frames);
     return noErr;
 }
 
 static OSStatus PlayCB(void *ref, AudioUnitRenderActionFlags *flags, const AudioTimeStamp *ts, UInt32 bus, UInt32 frames, AudioBufferList *io)
 {
-    acv *e = gEngine;
+    void *e = gEngine;
+    ACAudioPullFn pull = gPull;
     UInt32 i;
     for (i = 0; i < io->mNumberBuffers; i++) {
         AudioBuffer *b = &io->mBuffers[i];
         if (!b->mData) continue;
-        if (!e || i > 0) memset(b->mData, 0, b->mDataByteSize);
-        else acv_pull_playout(e, (int16_t *)b->mData, (int)(b->mDataByteSize / 2));
+        if (!e || !pull || i > 0) memset(b->mData, 0, b->mDataByteSize);
+        else pull(e, (int16_t *)b->mData, (int)(b->mDataByteSize / 2));
     }
     return noErr;
 }
@@ -86,7 +91,7 @@ static NSString *Code(OSStatus s) { return [NSString stringWithFormat:@"%d", (in
 
     AudioStreamBasicDescription f;
     memset(&f, 0, sizeof(f));
-    f.mSampleRate = ACV_SAMPLE_RATE;
+    f.mSampleRate = ACG_SAMPLE_RATE;
     f.mFormatID = kAudioFormatLinearPCM;
     f.mFormatFlags = kAudioFormatFlagIsSignedInteger | kAudioFormatFlagIsPacked;
     f.mFramesPerPacket = 1;
@@ -116,7 +121,7 @@ bad:
     return NO;
 }
 
-- (BOOL)startWithEngine:(acv *)engine error:(NSString **)err
+- (BOOL)startWithEngine:(void *)engine push:(ACAudioPushFn)push pull:(ACAudioPullFn)pull error:(NSString **)err
 {
     if (_running) return YES;
     OSStatus st;
@@ -136,6 +141,8 @@ bad:
     if (st != noErr) { if (err) *err = [NSString stringWithFormat:@"aktywacja audio %@", Code(st)]; return NO; }
     [self setSpeaker:_speaker];
 
+    gPush = push;
+    gPull = pull;
     gEngine = engine;
     NSString *e1 = nil, *e2 = nil;
     BOOL ok = [self setupUnit:kAudioUnitSubType_VoiceProcessingIO name:@"VPIO" error:&e1];

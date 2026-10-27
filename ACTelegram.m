@@ -493,7 +493,7 @@ static NSString *DCFallbackIP(int dc)
         [NSNumber numberWithInt:self.apiId], @"api_id",
         [dev model], @"device_model",
         [dev systemVersion], @"system_version",
-        @"0.6.1", @"app_version",
+        @"0.7.0", @"app_version",
         @"pl", @"system_lang_code",
         @"", @"lang_pack",
         @"pl", @"lang_code",
@@ -1306,6 +1306,8 @@ static NSString *ServiceLabel(NSDictionary *action, BOOL out)
     } else if ([t isEqualToString:@"updatePhoneCall"]) {
         NSDictionary *pc = DictOf([u objectForKey:@"phone_call"]);
         if (pc) [[ACCall shared] handlePhoneCall:pc];
+    } else if ([t isEqualToString:@"updatePhoneCallSignalingData"]) {
+        [[ACCall shared] signalingData:UnHex(StrOf([u objectForKey:@"data"])) callId:LongOf([u objectForKey:@"phone_call_id"])];
     } else if ([t isEqualToString:@"updateDeleteMessages"]) {
         NSArray *ids = ArrOf([u objectForKey:@"messages"]);
         BOOL changed = NO;

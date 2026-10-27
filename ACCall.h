@@ -1,7 +1,7 @@
 #import <Foundation/Foundation.h>
 #import "ACDemo.h"
 
-/* Rozmowa głosowa 1:1 przez Telegram: sygnalizacja (phone.*), wymiana kluczy DH, silnik dźwięku (ac_voip). */
+/* Rozmowa głosowa 1:1 przez Telegram: sygnalizacja (phone.*), wymiana kluczy DH, silnik dźwięku zgodny z tgcalls 2.7.7 (ac_tgc). */
 
 extern NSString *const ACCallDidChangeNotification;
 
@@ -33,5 +33,6 @@ typedef enum {
 
 /* z ACTelegram */
 - (void)handlePhoneCall:(NSDictionary *)phoneCall;
+- (void)signalingData:(NSData *)data callId:(long long)callId;     /* updatePhoneCallSignalingData */
 - (void)sessionEnded;                                            /* wylogowanie: natychmiast przerwij */
 @end

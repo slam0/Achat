@@ -5,7 +5,7 @@
 #import "ACCallController.h"
 #import "ACStore.h"
 #import "ACCrash.h"
-#include "ac_voip.h"
+#include "ac_tgc.h"
 #include "ac_dh.h"
 #include "tg_crypto.h"
 #import <AudioToolbox/AudioToolbox.h>
@@ -15,7 +15,7 @@ NSString *const ACCallDidChangeNotification = @"ACCallDidChangeNotification";
 
 #define PROTO_MIN_LAYER 65
 #define PROTO_MAX_LAYER 92
-#define PROTO_LIB @"2.4.4"
+#define PROTO_LIB @"2.7.7"
 
 static NSString *Hex(NSData *d)
 {
@@ -83,7 +83,10 @@ static int DHPrepare(const uint8_t *p, size_t plen, int g, const uint8_t *rnd, s
 }
 
 static void EngineState(void *ud, int st, int err);
+static void EngineSignal(void *ud, const uint8_t *data, int len);
 static void EngineLog(const char *line);
+static void PushCapture(void *e, const int16_t *pcm, int n) { acg_push_capture((acg *)e, pcm, n); }
+static void PullPlayout(void *e, int16_t *pcm, int n) { acg_pull_playout((acg *)e, pcm, n); }
 
 /* Dziennik rozmów: Documents/aerochat-call.log (widoczny przez udostępnianie plików w iTunes albo Filzę) */
 static void CallLog(NSString *line)
@@ -116,7 +119,8 @@ static NSString *JSONText(id o)
     NSData *_gAHash;                /* przychodząca: skrót g_a od dzwoniącego */
     NSData *_key;                   /* wspólny klucz 256 B */
     int _gen;                       /* zmienia się z każdą nową rozmową; odrzuca spóźnione odpowiedzi */
-    acv *_engine;
+    acg *_engine;
+    NSMutableArray *_pendingSignaling;   /* dane sygnalizacyjne, które przyszły zanim ruszył silnik */
     ACAudio *_audio;
     NSDate *_activeSince;
     NSTimer *_tick, *_ring;
@@ -224,6 +228,7 @@ static NSString *ReasonError(NSString *e)
     _callId = _accessHash = _peerId = _peerAccess = 0;
     _p = nil; _g = 0; _priv = nil; _pub = nil; _gAHash = nil; _key = nil;
     _mediaStarted = NO; _reconnecting = NO; _peerMuted = NO;
+    _pendingSignaling = nil;
     _muted = NO; _speaker = NO;
     _activeSince = nil;
     _peerName = nil;
@@ -371,7 +376,7 @@ static NSString *ReasonError(NSString *e)
         [self resetCall];
         _outgoing = NO;
         _peerName = name;
-        [self setState:ACCallEnded status:[NSString stringWithFormat:@"Odrzucono połączenie — niezgodność: %@. Aplikacja obsługuje tylko bibliotekę 2.4.4, warstwy 65–92, bez wideo.", detail]];
+        [self setState:ACCallEnded status:[NSString stringWithFormat:@"Odrzucono połączenie — niezgodność: %@. Aplikacja obsługuje tylko bibliotekę 2.7.7, warstwy 65–92, bez wideo.", detail]];
         [self scheduleIdleAfter:15000];
         return;
     }
@@ -499,53 +504,102 @@ static NSString *ReasonError(NSString *e)
 - (void)startMediaWithConnections:(NSArray *)conns
 {
     if ([_key length] != 256) { [self failCall:@"Brak klucza."]; return; }
-    CallLog([NSString stringWithFormat:@"start dźwięku, serwery: %@", JSONText(conns)]);
-    acv_set_log(EngineLog);
-    acv *v = acv_new((const uint8_t *)[_key bytes], _outgoing ? 1 : 0, EngineState, (void *)(intptr_t)_gen);
+    CallLog([NSString stringWithFormat:@"start dźwięku (tgcalls %@), serwery: %@", PROTO_LIB, JSONText(conns)]);
+    acg_set_log(EngineLog);
+    acg *v = acg_new((const uint8_t *)[_key bytes], _outgoing ? 1 : 0, EngineState, EngineSignal, (void *)(intptr_t)_gen);
     if (!v) { [self failCall:@"Nie udało się uruchomić kodeka dźwięku."]; return; }
+
+    /* Numer serwera w kandydacie ICE ("reflector-<numer>-<znacznik>") to pozycja id połączenia na posortowanej liście (od 1).
+       Nie mamy pewności, czy lista obejmuje połączenia TCP, więc podajemy oba warianty numeracji jako osobne porty. */
+    NSMutableArray *allIds = [NSMutableArray array], *udpIds = [NSMutableArray array];
+    for (id o in conns) {
+        NSDictionary *c = DictOf(o);
+        if (!c || ![StrOf([c objectForKey:@"_"]) isEqualToString:@"phoneConnection"]) continue;
+        NSNumber *cid = [NSNumber numberWithLongLong:LongOf([c objectForKey:@"id"])];
+        if (![allIds containsObject:cid]) [allIds addObject:cid];
+        if (!BoolOf([c objectForKey:@"tcp"]) && ![udpIds containsObject:cid]) [udpIds addObject:cid];
+    }
+    [allIds sortUsingSelector:@selector(compare:)];
+    [udpIds sortUsingSelector:@selector(compare:)];
     int n = 0;
+    NSMutableString *map = [NSMutableString string];
     for (id o in conns) {
         NSDictionary *c = DictOf(o);
         if (!c || ![StrOf([c objectForKey:@"_"]) isEqualToString:@"phoneConnection"] || BoolOf([c objectForKey:@"tcp"])) continue;
         NSString *ip = StrOf([c objectForKey:@"ip"]);
         NSData *tag = UnHex(StrOf([c objectForKey:@"peer_tag"]));
         if ([ip length] == 0 || [tag length] != 16) continue;
-        if (acv_add_relay(v, [ip UTF8String], IntOf([c objectForKey:@"port"]), (const uint8_t *)[tag bytes]) == 0) n++;
+        NSNumber *cid = [NSNumber numberWithLongLong:LongOf([c objectForKey:@"id"])];
+        int h1 = (int)[allIds indexOfObject:cid] + 1, h2 = (int)[udpIds indexOfObject:cid] + 1;
+        int port = IntOf([c objectForKey:@"port"]);
+        if (acg_add_reflector(v, h1, [ip UTF8String], port, (const uint8_t *)[tag bytes]) == 0) n++;
+        if (h2 != h1 && acg_add_reflector(v, h2, [ip UTF8String], port, (const uint8_t *)[tag bytes]) == 0) n++;
+        [map appendFormat:@" %@:%d id=%@ -> %d/%d", ip, port, cid, h1, h2];
     }
-    if (n == 0) { acv_free(v); [self failCall:@"Telegram nie podał serwera rozmów."]; return; }
+    CallLog([@"numeracja serwerów (wszystkie/udp):" stringByAppendingString:map]);
+    if (n == 0) { acg_free(v); [self failCall:@"Telegram nie podał serwera rozmów."]; return; }
     ACAudio *audio = [[ACAudio alloc] init];
     NSString *aerr = nil;
     [audio setSpeaker:_speaker];
-    if (![audio startWithEngine:v error:&aerr]) {
-        acv_free(v);
+    if (![audio startWithEngine:v push:PushCapture pull:PullPlayout error:&aerr]) {
+        acg_free(v);
         ACCrumb([@"audio start: " stringByAppendingString:aerr ?: @"?"]);
         [self failCall:[NSString stringWithFormat:@"Nie można uruchomić mikrofonu lub głośnika (%@).", aerr ?: @"?"]];
         return;
     }
     char err[120];
-    if (acv_start(v, err, sizeof(err)) != 0) {
+    if (acg_start(v, err, sizeof(err)) != 0) {
         [audio stop];
-        acv_free(v);
+        acg_free(v);
         [self failCall:[NSString stringWithFormat:@"Nie można otworzyć połączenia (%s).", err]];
         return;
     }
     _engine = v;
     _audio = audio;
-    if (_muted) acv_set_mute(_engine, 1);
+    if (_muted) acg_set_mute(_engine, 1);
+    /* dane sygnalizacyjne od rozmówcy, które przyszły przed startem silnika */
+    NSArray *pend = _pendingSignaling;
+    _pendingSignaling = nil;
+    for (NSData *d in pend) acg_signaling_in(_engine, (const uint8_t *)[d bytes], (int)[d length]);
     [self setState:ACCallConnecting status:@"Łączenie…"];
     _tick = [NSTimer scheduledTimerWithTimeInterval:1.0 target:self selector:@selector(tickOnce) userInfo:nil repeats:YES];
+}
+
+/* updatePhoneCallSignalingData z serwera */
+- (void)signalingData:(NSData *)d callId:(long long)cid
+{
+    if ([d length] == 0 || cid == 0 || cid != _callId || ![self inProgress]) return;
+    if (_engine) { acg_signaling_in(_engine, (const uint8_t *)[d bytes], (int)[d length]); return; }
+    if (!_pendingSignaling) _pendingSignaling = [NSMutableArray array];
+    if ([_pendingSignaling count] < 200) [_pendingSignaling addObject:d];
+}
+
+/* silnik chce wysłać dane sygnalizacyjne (wywołanie z głównego wątku) */
+- (void)sendSignaling:(NSData *)d gen:(int)gen
+{
+    if (gen != _gen || _callId == 0 || ![self inProgress]) return;
+    NSDictionary *req = [NSDictionary dictionaryWithObjectsAndKeys:@"phone.sendSignalingData", @"_", [self inputCall], @"peer", Hex(d), @"data", nil];
+    [[ACTelegram shared] call:req done:^(id res, NSString *err, int code) {
+        if (err) CallLog([NSString stringWithFormat:@"sendSignalingData błąd: %@ (%d)", err, code]);
+    }];
 }
 
 - (void)stopMedia
 {
     if (_audio) { [_audio stop]; _audio = nil; }
-    if (_engine) { acv_free(_engine); _engine = NULL; }
+    if (_engine) {
+        char d[300];
+        acg_describe(_engine, d, sizeof(d));
+        CallLog([@"silnik koniec: " stringByAppendingString:[NSString stringWithUTF8String:d]]);
+        acg_free(_engine);
+        _engine = NULL;
+    }
 }
 
 - (void)tickOnce
 {
     if (_engine) {
-        BOOL pm = acv_peer_muted(_engine) != 0;
+        BOOL pm = acg_peer_muted(_engine) != 0;
         if (pm != _peerMuted) _peerMuted = pm;
     }
     [self changed];
@@ -555,18 +609,21 @@ static NSString *ReasonError(NSString *e)
 {
     CallLog([NSString stringWithFormat:@"silnik: stan=%d błąd=%d", st, err]);
     if (gen != _gen || !_engine) return;
-    if (st == ACV_STATE_ESTABLISHED) {
+    if (st == ACG_STATE_ESTABLISHED) {
         _reconnecting = NO;
         if (_state != ACCallActive) {
             _activeSince = [NSDate date];
             [self setState:ACCallActive status:@""];
         } else [self changed];
-    } else if (st == ACV_STATE_RECONNECTING) {
+    } else if (st == ACG_STATE_RECONNECTING) {
         _reconnecting = YES;
         [self setState:_state status:@"Łączenie ponownie…"];
-    } else if (st == ACV_STATE_FAILED) {
-        NSString *m = err == ACV_ERR_TIMEOUT ? @"Nie udało się nawiązać połączenia z rozmówcą (brak odpowiedzi serwera rozmów)." :
-                      err == ACV_ERR_INCOMPATIBLE ? @"Rozmówca używa niezgodnej wersji protokołu dźwięku (silnik)." : [NSString stringWithFormat:@"Błąd połączenia (kod %d).", err];
+    } else if (st == ACG_STATE_FAILED) {
+        char d[300];
+        acg_describe(_engine, d, sizeof(d));
+        CallLog([@"silnik diagnostyka: " stringByAppendingString:[NSString stringWithUTF8String:d]]);
+        NSString *m = err == ACG_ERR_TIMEOUT ? @"Nie udało się nawiązać połączenia z rozmówcą (brak odpowiedzi serwera rozmów)." :
+                      err == ACG_ERR_INCOMPATIBLE ? @"Rozmówca używa niezgodnej wersji protokołu dźwięku (silnik)." : [NSString stringWithFormat:@"Błąd połączenia (kod %d).", err];
         [self discardId:_callId access:_accessHash reason:@"phoneCallDiscardReasonDisconnect" duration:_activeSince ? (int)(-[_activeSince timeIntervalSinceNow]) : 0];
         [self endLocally:m];
     } else if (_state == ACCallConnecting) {
@@ -577,7 +634,7 @@ static NSString *ReasonError(NSString *e)
 - (void)setMuted:(BOOL)muted
 {
     _muted = muted;
-    if (_engine) acv_set_mute(_engine, muted ? 1 : 0);
+    if (_engine) acg_set_mute(_engine, muted ? 1 : 0);
     [self changed];
 }
 
@@ -655,6 +712,13 @@ static void EngineState(void *ud, int st, int err)
 {
     int gen = (int)(intptr_t)ud;
     dispatch_async(dispatch_get_main_queue(), ^{ [[ACCall shared] engineState:st error:err gen:gen]; });
+}
+
+static void EngineSignal(void *ud, const uint8_t *data, int len)
+{
+    int gen = (int)(intptr_t)ud;
+    NSData *d = [NSData dataWithBytes:data length:len > 0 ? len : 0];
+    dispatch_async(dispatch_get_main_queue(), ^{ [[ACCall shared] sendSignaling:d gen:gen]; });
 }
 
 static void EngineLog(const char *line)

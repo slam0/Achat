@@ -1,7 +1,17 @@
-# AeroChat 0.6.1 (klient Telegrama, załączniki, rozmowy głosowe)
+# AeroChat 0.7.0 (klient Telegrama, załączniki, rozmowy głosowe)
 
 Klient komunikatora w stylu iOS 6 dla jailbreakowanego iPhone'a (armv7). Łączy się z Telegramem
 własnym, napisanym od zera klientem MTProto 2.0 (oficjalnie dozwolone klienty firm trzecich).
+
+## Co nowego w 0.7.0
+- **Nowy silnik rozmów zgodny z biblioteką tgcalls 2.7.7** — taką, jakiej używają obecne aplikacje Telegrama
+  (Android, iOS, Desktop). Stary silnik (libtgvoip 2.4.4) nie dogadywał się z nowymi aplikacjami, które tej
+  biblioteki już nie deklarują. Nowy: ICE/STUN przez serwery przekaźnikowe, szyfrowanie AES-256-CTR kluczem
+  rozmowy, kandydaci ICE przez `phone.sendSignalingData`, dźwięk Opus w pakietach RTP z potwierdzeniami TWCC.
+- Dziennik rozmów (`Documents/aerochat-call.log`) zawiera teraz diagnostykę silnika (numeracja serwerów,
+  liczniki pakietów); przy błędzie wklej go w wiadomości.
+- Nie dało się sprawdzić na prawdziwym telefonie ani z prawdziwą aplikacją Telegrama — pierwsza wersja może
+  wymagać poprawek na podstawie dziennika.
 
 ## Co nowego w 0.6.0
 - **Rozmowy głosowe przez Telegram** (1:1, tylko dźwięk, bez żadnego dodatkowego serwera): w czacie z użytkownikiem
@@ -12,11 +22,11 @@ własnym, napisanym od zera klientem MTProto 2.0 (oficjalnie dozwolone klienty f
   (także w tle, jeśli trwa rozmowa — aplikacja ma tryb pracy w tle „audio"). Telefon nie dostaje powiadomień
   push, więc zamknięta aplikacja nie zadzwoni.
 - Wiadomości o rozmowach („Rozmowa głosowa, 3:12", „Nieodebrana rozmowa") pojawiają się w czacie.
-- Pod spodem: własny silnik rozmów w C (protokół libtgvoip 2.4.4, pakiety UDP, szyfrowanie MTProto 2.0,
+- Pod spodem: własny silnik rozmów w C (od 0.7.0 protokół tgcalls 2.7.7: ICE/STUN, AES-CTR, RTP,
   bufor opóźnień), kodek Opus (stałoprzecinkowy, 16 kHz) i dźwięk przez AudioUnit z usuwaniem echa.
 - Ograniczenia: bez wideo (przychodzące wideorozmowy są odrzucane), bez weryfikacji emotikonami, bez rozmów
-  grupowych. Rozmowa zadziała tylko, jeśli aplikacja rozmówcy nadal obsługuje starszą bibliotekę rozmów 2.4.4
-  (oficjalne aplikacje ją deklarują, ale nie dało się tego sprawdzić na prawdziwym serwerze).
+  grupowych. Rozmowa zadziała tylko z aplikacją rozmówcy deklarującą bibliotekę 2.7.7
+  (obecne oficjalne aplikacje ją deklarują, ale nie dało się tego sprawdzić na prawdziwym serwerze).
 
 ## Co nowego w 0.5.0
 - **Otwieranie załączników**: zdjęcia i wideo mają miniatury w dymkach; dotknięcie pobiera plik (z paskiem
@@ -68,8 +78,9 @@ Uwaga: klucze trafiają do pliku .deb, więc nie udostępniaj go publicznie, je�
   MTProto 2.0 (AES-IGE, SHA-256), potwierdzenia, ponawianie przy złej soli i czasie, hasło 2FA (SRP).
 - `tg_tl.c` – silnik TL sterowany schematem `Resources/api.tl` (layer 222): zamienia JSON na bajty
   zapytań i odpowiedzi na JSON, więc w aplikacji nie ma ręcznie wpisanych identyfikatorów.
-- `ac_voip.c` – silnik rozmów: pakiety libtgvoip (nagłówek v9), szyfrowanie KDF2/AES-IGE, INIT/INIT_ACK, ping,
-  wyciszanie, bufor opóźnień i kodowanie Opus. `ac_dh.c` – wymiana kluczy DH rozmów. `ACAudio.m` – mikrofon i
+- `ac_tgc.c` – silnik rozmów zgodny z tgcalls 2.7.7: STUN/ICE przez serwery przekaźnikowe, EncryptedConnection
+  (AES-256-CTR, potwierdzenia, ponawianie), RTP + TWCC, bufor opóźnień i kodowanie Opus. (`ac_voip.c` to stary
+  silnik libtgvoip, niewłączany do budowy.) `ac_dh.c` – wymiana kluczy DH rozmów. `ACAudio.m` – mikrofon i
   głośnik (AudioUnit), `ACCall.m` – sygnalizacja phone.* i stan rozmowy, `ACCallController.m` – ekran rozmowy.
 - `opus/` – kodek Opus 1.3.1 (licencja BSD w `opus/COPYING`), zbudowany w wersji stałoprzecinkowej.
 - `tg_crypto.c`, `tg_bn.c` – SHA-1/256/512, PBKDF2, AES-256, liczby 2048-bitowe, rozpakowywanie gzip.
