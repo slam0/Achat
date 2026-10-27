@@ -85,6 +85,26 @@ static int DHPrepare(const uint8_t *p, size_t plen, int g, const uint8_t *rnd, s
 static void EngineState(void *ud, int st, int err);
 static void EngineLog(const char *line);
 
+/* Dziennik rozmów: Documents/aerochat-call.log (widoczny przez udostępnianie plików w iTunes albo Filzę) */
+static void CallLog(NSString *line)
+{
+    static NSDateFormatter *f;
+    if (!f) { f = [[NSDateFormatter alloc] init]; [f setDateFormat:@"HH:mm:ss"]; }
+    NSArray *dirs = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES);
+    NSString *path = [[dirs objectAtIndex:0] stringByAppendingPathComponent:@"aerochat-call.log"];
+    NSString *old = [NSString stringWithContentsOfFile:path encoding:NSUTF8StringEncoding error:nil] ?: @"";
+    if ([old length] > 60000) old = [old substringFromIndex:[old length] - 30000];
+    NSString *out = [old stringByAppendingFormat:@"%@ %@\n", [f stringFromDate:[NSDate date]], line];
+    [out writeToFile:path atomically:YES encoding:NSUTF8StringEncoding error:nil];
+}
+
+static NSString *JSONText(id o)
+{
+    if (!o || ![NSJSONSerialization isValidJSONObject:o]) return @"?";
+    NSData *d = [NSJSONSerialization dataWithJSONObject:o options:0 error:nil];
+    return d ? [[NSString alloc] initWithData:d encoding:NSUTF8StringEncoding] : @"?";
+}
+
 @implementation ACCall {
     ACCallState _state;
     BOOL _outgoing, _muted, _speaker, _peerMuted, _reconnecting, _mediaStarted;
@@ -282,7 +302,7 @@ static NSString *ReasonError(NSString *e)
             if (pc && LongOf([pc objectForKey:@"id"]) != 0) [self discardId:LongOf([pc objectForKey:@"id"]) access:LongOf([pc objectForKey:@"access_hash"]) reason:@"phoneCallDiscardReasonHangup" duration:0];
             return;
         }
-        if (err || !pc) { [self endLocally:err ? ReasonError(err) : @"Serwer nie odpowiedział."]; return; }
+        if (err || !pc) { CallLog([NSString stringWithFormat:@"requestCall błąd: %@ (%d)", err, code]); [self endLocally:err ? ReasonError(err) : @"Serwer nie odpowiedział."]; return; }
         [[ACTelegram shared] cacheEntities:DictOf(res)];
         [self handlePhoneCall:pc];
     }];
@@ -313,7 +333,7 @@ static NSString *ReasonError(NSString *e)
             [[ACTelegram shared] call:req done:^(id res, NSString *err, int code) {
                 if (gen != _gen) return;
                 NSDictionary *c = DictOf([DictOf(res) objectForKey:@"phone_call"]);
-                if (err || !c) { [self failCall:err ? ReasonError(err) : @"Serwer nie odpowiedział."]; return; }
+                if (err || !c) { CallLog([NSString stringWithFormat:@"confirmCall błąd: %@ (%d)", err, code]); [self failCall:err ? ReasonError(err) : @"Serwer nie odpowiedział."]; return; }
                 [self handlePhoneCall:c];
             }];
         });
@@ -339,13 +359,20 @@ static NSString *ReasonError(NSString *e)
     long long from = LongOf([pc objectForKey:@"admin_id"]);
     NSDictionary *u = [tg cachedUser:from];
     NSString *name = u ? [tg displayNameOfUser:u] : [NSString stringWithFormat:@"Użytkownik %lld", from];
+    CallLog([NSString stringWithFormat:@"połączenie przychodzące od %lld, protokół: %@, wideo=%d", from, JSONText(proto), (int)video]);
     if (!okLayer || !okLib || video) {
+        NSMutableArray *why = [NSMutableArray array];
+        if (video) [why addObject:@"wideo"];
+        if (!okLayer) [why addObject:[NSString stringWithFormat:@"warstwy %d–%d", IntOf([proto objectForKey:@"min_layer"]), IntOf([proto objectForKey:@"max_layer"])]];
+        if (!okLib) [why addObject:[NSString stringWithFormat:@"biblioteki: %@", [libs count] ? [libs componentsJoinedByString:@", "] : @"brak"]];
+        NSString *detail = [why componentsJoinedByString:@"; "];
+        CallLog([@"odrzucono: " stringByAppendingString:detail]);
         [self discardId:cid access:acc reason:@"phoneCallDiscardReasonHangup" duration:0];
         [self resetCall];
         _outgoing = NO;
         _peerName = name;
-        [self setState:ACCallEnded status:video ? @"Wideorozmowy nie są obsługiwane — odrzucono połączenie." : @"Niezgodna wersja rozmów — odrzucono połączenie."];
-        [self scheduleIdleAfter:4000];
+        [self setState:ACCallEnded status:[NSString stringWithFormat:@"Odrzucono połączenie — niezgodność: %@. Aplikacja obsługuje tylko bibliotekę 2.4.4, warstwy 65–92, bez wideo.", detail]];
+        [self scheduleIdleAfter:15000];
         return;
     }
     [self resetCall];
@@ -387,7 +414,7 @@ static NSString *ReasonError(NSString *e)
         [[ACTelegram shared] call:req done:^(id res, NSString *e, int code) {
             if (gen != _gen) return;
             NSDictionary *c = DictOf([DictOf(res) objectForKey:@"phone_call"]);
-            if (e || !c) { [self failCall:e ? ReasonError(e) : @"Serwer nie odpowiedział."]; return; }
+            if (e || !c) { CallLog([NSString stringWithFormat:@"acceptCall błąd: %@ (%d)", e, code]); [self failCall:e ? ReasonError(e) : @"Serwer nie odpowiedział."]; return; }
             [self handlePhoneCall:c];
         }];
     }];
@@ -399,6 +426,8 @@ static NSString *ReasonError(NSString *e)
 {
     NSString *t = StrOf([pc objectForKey:@"_"]);
     long long cid = LongOf([pc objectForKey:@"id"]);
+    CallLog([NSString stringWithFormat:@"serwer: %@ id=%lld stan=%d%@", t, cid, (int)_state,
+             [pc objectForKey:@"reason"] ? [@" powód=" stringByAppendingString:JSONText([pc objectForKey:@"reason"])] : @""]);
     if ([t isEqualToString:@"phoneCallRequested"]) { [self incomingRequested:pc]; return; }
     if (_state == ACCallIdle || _state == ACCallEnded) return;
     if (_callId == 0 && _outgoing && [t isEqualToString:@"phoneCallWaiting"]) {
@@ -470,6 +499,7 @@ static NSString *ReasonError(NSString *e)
 - (void)startMediaWithConnections:(NSArray *)conns
 {
     if ([_key length] != 256) { [self failCall:@"Brak klucza."]; return; }
+    CallLog([NSString stringWithFormat:@"start dźwięku, serwery: %@", JSONText(conns)]);
     acv_set_log(EngineLog);
     acv *v = acv_new((const uint8_t *)[_key bytes], _outgoing ? 1 : 0, EngineState, (void *)(intptr_t)_gen);
     if (!v) { [self failCall:@"Nie udało się uruchomić kodeka dźwięku."]; return; }
@@ -523,6 +553,7 @@ static NSString *ReasonError(NSString *e)
 
 - (void)engineState:(int)st error:(int)err gen:(int)gen
 {
+    CallLog([NSString stringWithFormat:@"silnik: stan=%d błąd=%d", st, err]);
     if (gen != _gen || !_engine) return;
     if (st == ACV_STATE_ESTABLISHED) {
         _reconnecting = NO;
@@ -534,8 +565,8 @@ static NSString *ReasonError(NSString *e)
         _reconnecting = YES;
         [self setState:_state status:@"Łączenie ponownie…"];
     } else if (st == ACV_STATE_FAILED) {
-        NSString *m = err == ACV_ERR_TIMEOUT ? @"Nie udało się nawiązać połączenia z rozmówcą." :
-                      err == ACV_ERR_INCOMPATIBLE ? @"Rozmówca używa niezgodnej wersji rozmów." : @"Błąd połączenia.";
+        NSString *m = err == ACV_ERR_TIMEOUT ? @"Nie udało się nawiązać połączenia z rozmówcą (brak odpowiedzi serwera rozmów)." :
+                      err == ACV_ERR_INCOMPATIBLE ? @"Rozmówca używa niezgodnej wersji protokołu dźwięku (silnik)." : [NSString stringWithFormat:@"Błąd połączenia (kod %d).", err];
         [self discardId:_callId access:_accessHash reason:@"phoneCallDiscardReasonDisconnect" duration:_activeSince ? (int)(-[_activeSince timeIntervalSinceNow]) : 0];
         [self endLocally:m];
     } else if (_state == ACCallConnecting) {
@@ -572,7 +603,8 @@ static NSString *ReasonError(NSString *e)
 
 - (void)hangup
 {
-    if (_state == ACCallIdle || _state == ACCallEnded) return;
+    if (_state == ACCallEnded) { _gen++; [self setState:ACCallIdle status:nil]; return; }      /* "Zamknij" na ekranie z błędem */
+    if (_state == ACCallIdle) return;
     BOOL incoming = _state == ACCallIncoming;
     int dur = _activeSince ? (int)(-[_activeSince timeIntervalSinceNow]) : 0;
     [self discardId:_callId access:_accessHash reason:@"phoneCallDiscardReasonHangup" duration:dur];
@@ -588,6 +620,7 @@ static NSString *ReasonError(NSString *e)
 - (void)endLocally:(NSString *)text
 {
     if (_state == ACCallIdle) return;
+    CallLog([@"koniec: " stringByAppendingString:text ?: @""]);
     _gen++;                                    /* spóźnione odpowiedzi nie dotyczą już tej rozmowy */
     int gen = _gen;
     [self stopRing];
@@ -596,7 +629,8 @@ static NSString *ReasonError(NSString *e)
     _callId = 0;
     _reconnecting = NO;
     [self setState:ACCallEnded status:text];
-    [self scheduleIdleAfter:1800];
+    BOOL plain = [text hasPrefix:@"Rozmowa zakończona"] || [text hasPrefix:@"Odrzucono."] || [text hasPrefix:@"Anulowano."] || [text hasPrefix:@"Połączenie anulowane"];
+    [self scheduleIdleAfter:plain ? 1800 : 15000];
     (void)gen;
 }
 
@@ -626,5 +660,5 @@ static void EngineState(void *ud, int st, int err)
 static void EngineLog(const char *line)
 {
     NSString *s = [NSString stringWithUTF8String:line ? line : ""];
-    dispatch_async(dispatch_get_main_queue(), ^{ ACCrumb([@"rozmowa: " stringByAppendingString:s]); });
+    dispatch_async(dispatch_get_main_queue(), ^{ CallLog([@"silnik: " stringByAppendingString:s]); });
 }

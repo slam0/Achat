@@ -55,7 +55,12 @@
     _name.textColor = ACP()->metal || ACP()->classic ? ACTextColor() : [UIColor whiteColor];
     ACStyleShadow(_name);
     [self.view addSubview:_name];
-    _status = [self labelWithSize:19 bold:NO y:236];
+    _status = [self labelWithSize:17 bold:NO y:236];
+    _status.numberOfLines = 0;                         /* komunikaty o błędach bywają długie */
+    _status.adjustsFontSizeToFitWidth = NO;
+    _status.frame = CGRectMake(16, 236, b.size.width - 32, 100);
+    _status.lineBreakMode = NSLineBreakByWordWrapping;
+    _status.textAlignment = NSTextAlignmentCenter;
     _status.textColor = ACP()->metal || ACP()->classic ? ACSubtleColor() : [UIColor colorWithWhite:1.0f alpha:0.9f];
     ACStyleShadow(_status);
     [self.view addSubview:_status];
@@ -105,7 +110,9 @@
     BOOL ended = c.state == ACCallEnded || c.state == ACCallIdle;
     _accept.hidden = !incoming;
     _decline.hidden = !incoming;
-    _hang.hidden = incoming || ended;
+    _hang.hidden = incoming || c.state == ACCallIdle;
+    [_hang setTitle:c.state == ACCallEnded ? @"Zamknij" : @"Zakończ" forState:UIControlStateNormal];
+    [_hang setBackgroundImage:ACGelImage(c.state == ACCallEnded ? 1 : 2) forState:UIControlStateNormal];
     _mute.hidden = incoming || ended;
     _speaker.hidden = incoming || ended;
     [self styleToggle:_mute on:c.muted title:@"Wycisz"];

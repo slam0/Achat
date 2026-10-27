@@ -493,7 +493,7 @@ static NSString *DCFallbackIP(int dc)
         [NSNumber numberWithInt:self.apiId], @"api_id",
         [dev model], @"device_model",
         [dev systemVersion], @"system_version",
-        @"0.6.0", @"app_version",
+        @"0.6.1", @"app_version",
         @"pl", @"system_lang_code",
         @"", @"lang_pack",
         @"pl", @"lang_code",

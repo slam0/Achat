@@ -1,7 +1,7 @@
 Package: com.nazar0vsky.aerochat
 Name: AeroChat
 Depends: firmware (>= 6.0)
-Version: 0.6.0
+Version: 0.6.1
 Architecture: iphoneos-arm
 Description: Komunikator w stylu iOS 6 (szary iPhone, metal, szkło Aero) z wyszukiwaniem – wersja z danymi pokazowymi
 Maintainer: nazar0vsky-slam0
