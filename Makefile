@@ -19,7 +19,7 @@ OPUS_FILES = $(sort $(wildcard opus/celt/*.c)) $(sort $(wildcard opus/silk/*.c))
 
 AeroChat_FILES = main.m AppDelegate.m ACStore.m ACCrash.m ACTheme.m ACMetal.m ACViews.m ACDemo.m ACChatsController.m ACContactsController.m ACChatController.m ACSettingsController.m ACTelegram.m ACTelegramMedia.m ACMedia.m ACSetupController.m ACCall.m ACCallController.m ACAudio.m tg_bn.c tg_crypto.c tg_tl.c tg_mt.c ac_libc.c ac_dh.c ac_voip.c $(OPUS_FILES)
 AeroChat_FRAMEWORKS = UIKit Foundation CoreGraphics QuartzCore AudioToolbox
-AeroChat_CFLAGS = -DHAVE_CONFIG_H -Iopus -Iopus/include -Iopus/celt -Iopus/silk -Iopus/silk/fixed -Iopus/src -fobjc-arc -O2 -fno-stack-protector -D_FORTIFY_SOURCE=0 -Wno-deprecated-declarations -Wno-unused-command-line-argument
+AeroChat_CFLAGS = -DHAVE_CONFIG_H -Iopus -Iopus/include -Iopus/celt -Iopus/silk -Iopus/silk/fixed -Iopus/src -fobjc-arc -O2 -fno-stack-protector -D_FORTIFY_SOURCE=0 -Wno-deprecated-declarations -Wno-unused-command-line-argument -Wno-error
 
 include $(THEOS_MAKE_PATH)/application.mk
 
