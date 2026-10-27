@@ -15,5 +15,10 @@ typedef void (^ACTGDone)(id res, NSString *err, int code);
 - (BOOL)connectedHome;
 - (void)notifyChats:(ACChat *)chat;
 - (void)mediaWipe;                                                     /* po wylogowaniu: kasuje pobrane pliki */
-- (void)mediaSessionEnded;                                            /* zamyka dodatkowe połączenia do załączników */
+- (void)mediaSessionEnded;
+- (void)processUpdates:(id)json;                                      /* aktualizacje (też z wyniku zapytania typu Updates) */
+- (void)cacheEntities:(NSDictionary *)r;                              /* users / chats z odpowiedzi */
+- (NSDictionary *)cachedUser:(long long)uid;
+- (NSString *)displayNameOfUser:(NSDictionary *)u;
+- (long long)myUserId;                                            /* zamyka dodatkowe połączenia do załączników */
 @end

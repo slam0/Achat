@@ -1,4 +1,5 @@
 #import "ACTelegram.h"
+#import "ACCall.h"
 #import "ACTelegramPrivate.h"
 #import "ACStore.h"
 #import "ACConfig.h"
@@ -463,7 +464,7 @@ static NSString *DCFallbackIP(int dc)
 - (void)enteredBackground
 {
     /* iOS i tak ubije gniazdo w uśpieniu; zamykamy je same, a po powrocie łączymy od nowa */
-    if (_authorized && !_busy) { _userClosed = YES; [self closeConnection]; [self notifyState]; }
+    if (_authorized && !_busy && ![[ACCall shared] inProgress]) { _userClosed = YES; [self closeConnection]; [self notifyState]; }
 }
 
 - (void)appBecameActive
@@ -492,7 +493,7 @@ static NSString *DCFallbackIP(int dc)
         [NSNumber numberWithInt:self.apiId], @"api_id",
         [dev model], @"device_model",
         [dev systemVersion], @"system_version",
-        @"0.5.0", @"app_version",
+        @"0.6.0", @"app_version",
         @"pl", @"system_lang_code",
         @"", @"lang_pack",
         @"pl", @"lang_code",
@@ -501,6 +502,8 @@ static NSString *DCFallbackIP(int dc)
 }
 
 - (int)homeDC { return _dc; }
+- (long long)myUserId { return _uid; }
+- (NSDictionary *)cachedUser:(long long)uid { return [_users objectForKey:[NSNumber numberWithLongLong:uid]]; }
 - (BOOL)connectedHome { return _connOK; }
 
 - (void)call:(NSDictionary *)obj done:(ACTGDone)done { [self call:obj raw:NO done:done]; }
@@ -815,6 +818,7 @@ static NSString *DCFallbackIP(int dc)
 
 - (void)wipeSession
 {
+    [[ACCall shared] sessionEnded];
     [self closeConnection];
     [self mediaWipe];
     _authorized = NO;
@@ -992,6 +996,20 @@ static NSString *MediaLabel(NSDictionary *media)
     return @"[Załącznik]";
 }
 
+static NSString *ServiceLabel(NSDictionary *action, BOOL out)
+{
+    if ([StrOf([action objectForKey:@"_"]) isEqualToString:@"messageActionPhoneCall"]) {
+        NSString *rs = StrOf([DictOf([action objectForKey:@"reason"]) objectForKey:@"_"]);
+        NSString *kind = BoolOf([action objectForKey:@"video"]) ? @"Wideorozmowa" : @"Rozmowa głosowa";
+        if ([rs isEqualToString:@"phoneCallDiscardReasonMissed"]) return out ? @"[Rozmowa bez odpowiedzi]" : @"[Nieodebrana rozmowa]";
+        if ([rs isEqualToString:@"phoneCallDiscardReasonBusy"]) return @"[Rozmówca był zajęty]";
+        int d = IntOf([action objectForKey:@"duration"]);
+        if (d > 0) return [NSString stringWithFormat:@"[%@, %d:%02d]", kind, d / 60, d % 60];
+        return [NSString stringWithFormat:@"[%@]", kind];
+    }
+    return @"[wiadomość serwisowa]";
+}
+
 - (ACMessage *)messageFrom:(NSDictionary *)m chat:(ACChat *)chat
 {
     NSString *t = StrOf([m objectForKey:@"_"]);
@@ -1001,7 +1019,7 @@ static NSString *MediaLabel(NSDictionary *media)
     am.outgoing = BoolOf([m objectForKey:@"out"]);
     am.time = TimeString(am.date);
     NSString *text;
-    if ([t isEqualToString:@"messageService"]) text = @"[wiadomość serwisowa]";
+    if ([t isEqualToString:@"messageService"]) text = ServiceLabel(DictOf([m objectForKey:@"action"]), am.outgoing);
     else {
         text = StrOf([m objectForKey:@"message"]);
         NSDictionary *md = DictOf([m objectForKey:@"media"]);
@@ -1285,6 +1303,9 @@ static NSString *MediaLabel(NSDictionary *media)
                     [c.messages replaceObjectAtIndex:i withObject:nm]; [self notifyChats:c]; break; }
             }
         }
+    } else if ([t isEqualToString:@"updatePhoneCall"]) {
+        NSDictionary *pc = DictOf([u objectForKey:@"phone_call"]);
+        if (pc) [[ACCall shared] handlePhoneCall:pc];
     } else if ([t isEqualToString:@"updateDeleteMessages"]) {
         NSArray *ids = ArrOf([u objectForKey:@"messages"]);
         BOOL changed = NO;

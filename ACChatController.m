@@ -2,6 +2,7 @@
 #import "ACTheme.h"
 #import "ACViews.h"
 #import "ACTelegram.h"
+#import "ACCall.h"
 
 #define BAR_H 46.0f
 
@@ -50,7 +51,7 @@
 - (void)viewDidLoad
 {
     [super viewDidLoad];
-    self.navigationItem.rightBarButtonItem = ACBarButton(@"Szukaj", self, @selector(toggleSearch));
+    [self updateBarButtons];
     CGRect b = self.view.bounds;
     UIView *bg = ACBackgroundView(b);
     [self.view addSubview:bg];
@@ -105,6 +106,28 @@
     [nc addObserver:self selector:@selector(mediaChanged:) name:ACTGMediaDidChangeNotification object:nil];
     [nc addObserver:self selector:@selector(keyboardWillChange:) name:UIKeyboardWillShowNotification object:nil];
     [nc addObserver:self selector:@selector(keyboardWillChange:) name:UIKeyboardWillHideNotification object:nil];
+}
+
+/* "Szukaj" zawsze; w czacie z użytkownikiem dodatkowo przycisk rozmowy */
+- (void)updateBarButtons
+{
+    UIBarButtonItem *search = ACBarButton(@"Szukaj", self, @selector(toggleSearch));
+    if (_chat.peerKind == 1 && [ACTelegram shared].live) {
+        UIBarButtonItem *call = ACBarButton(@"☎", self, @selector(callTapped));
+        self.navigationItem.rightBarButtonItems = [NSArray arrayWithObjects:search, call, nil];
+    } else {
+        self.navigationItem.rightBarButtonItems = [NSArray arrayWithObject:search];
+    }
+}
+
+- (void)callTapped
+{
+    [_field resignFirstResponder];
+    NSString *err = [[ACCall shared] startCallWithChat:_chat];
+    if (err) {
+        UIAlertView *a = [[UIAlertView alloc] initWithTitle:@"Rozmowa" message:err delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+        [a show];
+    }
 }
 
 - (void)viewDidAppear:(BOOL)animated
@@ -184,7 +207,7 @@
     _query = @"";
     _search = ACMakeSearchBar(self, @"Szukaj w rozmowie");
     _table.tableHeaderView = _search;
-    self.navigationItem.rightBarButtonItem = ACBarButton(@"Gotowe", self, @selector(toggleSearch));
+    self.navigationItem.rightBarButtonItems = [NSArray arrayWithObject:ACBarButton(@"Gotowe", self, @selector(toggleSearch))];
     [self rebuildVisible];
     [_table reloadData];
     [_table setContentOffset:CGPointZero animated:NO];
@@ -198,7 +221,7 @@
     [_search resignFirstResponder];
     _table.tableHeaderView = nil;
     _search = nil;
-    self.navigationItem.rightBarButtonItem = ACBarButton(@"Szukaj", self, @selector(toggleSearch));
+    [self updateBarButtons];
     [self rebuildVisible];
     [_table reloadData];
     [self scrollToBottomAnimated:NO];
