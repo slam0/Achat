@@ -1,12 +1,23 @@
-# AeroChat 0.4.0 (klient Telegrama, setup jak w iOS 5/6)
+# AeroChat 0.5.0 (klient Telegrama, załączniki)
 
 Klient komunikatora w stylu iOS 6 dla jailbreakowanego iPhone'a (armv7). Łączy się z Telegramem
 własnym, napisanym od zera klientem MTProto 2.0 (oficjalnie dozwolone klienty firm trzecich).
 
-## Co nowego w 0.4.0
+## Co nowego w 0.5.0
+- **Otwieranie załączników**: zdjęcia i wideo mają miniatury w dymkach; dotknięcie pobiera plik (z paskiem
+  postępu w procentach) i otwiera go w podglądzie iOS (zdjęcia, wideo MP4, audio MP3/M4A, PDF, dokumenty Office).
+  Pliki są w `Library/Caches/AeroChat` (iOS może je sam czyścić; "Wyloguj" kasuje je od razu).
+- Załączniki leżą na różnych serwerach Telegrama niż konto, więc aplikacja otwiera dodatkowe połączenia do
+  tych serwerów (z przeniesieniem autoryzacji) i zapamiętuje ich klucze.
+- Pliki powyżej 25 MB: pytanie o potwierdzenie. Formaty, których iOS 6 nie obsługuje (głosówki OGG/Opus, WebM,
+  WebP): propozycja "pobierz i otwórz w innej aplikacji". Naklejki są na razie tylko opisem.
+- **Nowy ekran powitalny**: zamiast suwaka zwykły przycisk "Zaloguj się numerem telefonu", ikona rysowana kodem,
+  link "Nie teraz, zostań w trybie demo".
+
+## Zmiany w 0.4.0
 - **Motyw "iOS 6 Len"**: ciemnoszary len z ekranu konfiguracji iOS 6 (tło bierzemy z systemowego koloru UIKit,
   własny wzór jest tylko zapasem), grafitowe wiersze i paski.
-- **Nowy ekran setup w stylu asystenta iOS 5/6**: powitanie z dużym napisem i suwakiem "przesuń, aby skonfigurować",
+- **Nowy ekran setup w stylu asystenta iOS 5/6**: powitanie z ikoną i przyciskiem (od 0.5.0; wcześniej suwak),
   potem grupowane tabele na lnie: numer telefonu, kod, hasło (jeśli konto je ma), na końcu ekran "Gotowe".
 - **Logowanie samym numerem telefonu**: klucze `api_id` / `api_hash` są wbudowane w aplikację przy budowaniu,
   więc użytkownik ich nie widzi. Telegram wymaga ich od każdego klienta, więc założ je JEDEN RAZ (poniżej).
@@ -27,7 +38,7 @@ Uwaga: klucze trafiają do pliku .deb, więc nie udostępniaj go publicznie, je�
   4. hasło dwuskładnikowe, jeśli konto je ma.
 - Po zalogowaniu na liście są **prawdziwe czaty**: osoby, grupy, kanały. Historia, wysyłanie tekstu,
   nowe wiadomości na żywo, liczniki nieprzeczytanych, status "online / był(a) …".
-- Załączniki (zdjęcia, pliki, głosówki) pokazują się na razie jako opis w nawiasie, np. `[Zdjęcie]`.
+- Załączniki w tej wersji pokazywały się tylko jako opis w nawiasie (od 0.5.0 da się je otwierać).
 - **Tryb demo** zostaje: bez logowania lista z przykładowymi rozmowami (przycisk "Pomiń").
 - Sesja jest zapamiętana w `Documents/aerochat.plist` (klucz autoryzacji). "Wyloguj" ją usuwa.
 

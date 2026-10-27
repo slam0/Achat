@@ -6,6 +6,10 @@
 #define BAR_H 46.0f
 
 @implementation ACChatController {
+    ACMedia *_wanted;                       /* załącznik, który otworzymy po pobraniu */
+    UIDocumentInteractionController *_dic;
+    int _alertAction;                       /* 1 = pobierz format spoza iOS 6, 2 = pobierz duży plik */
+    ACMedia *_alertMedia;
     ACChat *_chat;
     UITableView *_table;
     UIView *_bar;
@@ -57,7 +61,7 @@
     _table.separatorStyle = UITableViewCellSeparatorStyleNone;
     _table.dataSource = self;
     _table.delegate = self;
-    _table.allowsSelection = NO;
+    _table.allowsSelection = YES;
     [self.view addSubview:_table];
 
     _bar = [[UIView alloc] initWithFrame:CGRectMake(0, b.size.height - BAR_H, b.size.width, BAR_H)];
@@ -98,6 +102,7 @@
 
     NSNotificationCenter *nc = [NSNotificationCenter defaultCenter];
     [nc addObserver:self selector:@selector(telegramChanged:) name:ACTGChatsDidChangeNotification object:nil];
+    [nc addObserver:self selector:@selector(mediaChanged:) name:ACTGMediaDidChangeNotification object:nil];
     [nc addObserver:self selector:@selector(keyboardWillChange:) name:UIKeyboardWillShowNotification object:nil];
     [nc addObserver:self selector:@selector(keyboardWillChange:) name:UIKeyboardWillHideNotification object:nil];
 }
@@ -164,7 +169,7 @@
     } else {
         NSMutableArray *hits = [NSMutableArray array];
         for (ACMessage *m in _chat.messages) {
-            if (ACTextMatches(m.text, _query)) [hits addObject:m];
+            if (ACTextMatches([m summary], _query)) [hits addObject:m];
         }
         _visible = hits;
     }
@@ -255,15 +260,123 @@
 - (CGFloat)tableView:(UITableView *)tv heightForRowAtIndexPath:(NSIndexPath *)ip
 {
     ACMessage *m = [_visible objectAtIndex:(NSUInteger)ip.row];
-    return [ACBubbleCell heightForText:m.text width:tv.bounds.size.width] + (ip.row == 0 ? 6.0f : 0.0f);
+    return [ACBubbleCell heightForMessage:m] + (ip.row == 0 ? 6.0f : 0.0f);
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tv cellForRowAtIndexPath:(NSIndexPath *)ip
 {
     ACMessage *m = [_visible objectAtIndex:(NSUInteger)ip.row];
+    if (m.media) [[ACTelegram shared] loadThumb:m.media];
     ACBubbleCell *cell = [ACBubbleCell bubbleCellForTable:tv];
-    [cell configureWithText:m.text time:m.time outgoing:m.outgoing];
+    [cell configureWithMessage:m];
     return cell;
+}
+
+/* ---- załączniki ---- */
+
+- (NSIndexPath *)tableView:(UITableView *)tv willSelectRowAtIndexPath:(NSIndexPath *)ip
+{
+    ACMessage *m = [_visible objectAtIndex:(NSUInteger)ip.row];
+    return (m.media && [m.media canOpen]) ? ip : nil;
+}
+
+- (void)tableView:(UITableView *)tv didSelectRowAtIndexPath:(NSIndexPath *)ip
+{
+    [tv deselectRowAtIndexPath:ip animated:YES];
+    ACMedia *md = ((ACMessage *)[_visible objectAtIndex:(NSUInteger)ip.row]).media;
+    if (!md || ![md canOpen] || md.state == ACMediaLoading) return;
+    [_field resignFirstResponder];
+    if (md.state == ACMediaDone && [md.localPath length] && [[NSFileManager defaultManager] fileExistsAtPath:md.localPath]) {
+        [self openFile:md.localPath mode:[md needsOtherApp] ? 2 : 1];
+        return;
+    }
+    if ([md needsOtherApp]) {
+        _alertAction = 1;
+        _alertMedia = md;
+        UIAlertView *a = [[UIAlertView alloc] initWithTitle:@"Format spoza iOS 6"
+            message:@"iOS 6 nie odtworzy tego pliku sam. Mogę go pobrać i otworzyć w innej aplikacji, jeśli masz na telefonie odpowiednią."
+            delegate:self cancelButtonTitle:@"Anuluj" otherButtonTitles:@"Pobierz", nil];
+        [a show];
+        return;
+    }
+    if (md.size > 25 * 1024 * 1024) {
+        _alertAction = 2;
+        _alertMedia = md;
+        UIAlertView *a = [[UIAlertView alloc] initWithTitle:@"Duży plik"
+            message:[NSString stringWithFormat:@"Plik ma %@. Pobrać go teraz?", [ACMedia sizeString:md.size]]
+            delegate:self cancelButtonTitle:@"Anuluj" otherButtonTitles:@"Pobierz", nil];
+        [a show];
+        return;
+    }
+    [self startDownload:md];
+}
+
+- (void)startDownload:(ACMedia *)md
+{
+    _wanted = md;
+    [[ACTelegram shared] downloadMedia:md openMode:[md needsOtherApp] ? 2 : 1];
+}
+
+- (void)alertView:(UIAlertView *)alert clickedButtonAtIndex:(NSInteger)i
+{
+    ACMedia *md = _alertMedia;
+    int act = _alertAction;
+    _alertMedia = nil;
+    _alertAction = 0;
+    if (act != 0 && md && i == 1) [self startDownload:md];
+}
+
+- (void)openFile:(NSString *)path mode:(int)mode
+{
+    [_field resignFirstResponder];
+    _dic = [UIDocumentInteractionController interactionControllerWithURL:[NSURL fileURLWithPath:path]];
+    _dic.delegate = self;
+    BOOL ok = NO;
+    if (mode == 1) ok = [_dic presentPreviewAnimated:YES];
+    if (!ok) ok = [_dic presentOpenInMenuFromRect:self.view.bounds inView:self.view animated:YES];
+    if (!ok) {
+        UIAlertView *a = [[UIAlertView alloc] initWithTitle:@"Nie można otworzyć pliku"
+            message:@"Na tym telefonie nie ma aplikacji, która obsłuży ten typ pliku."
+            delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+        [a show];
+    }
+}
+
+- (UIViewController *)documentInteractionControllerViewControllerForPreview:(UIDocumentInteractionController *)controller
+{
+    return self.navigationController ? self.navigationController : self;
+}
+
+/* postęp i koniec pobierania: odświeżamy widoczne dymki, a po pobraniu otwieramy plik */
+- (void)mediaChanged:(NSNotification *)n
+{
+    ACMedia *md = [[n userInfo] objectForKey:@"media"];
+    if (!md || !self.isViewLoaded) return;
+    BOOL relayout = [[[n userInfo] objectForKey:@"relayout"] boolValue];
+    if (relayout) {
+        [_table reloadData];
+    } else {
+        for (NSIndexPath *ip in [_table indexPathsForVisibleRows]) {
+            if ((NSUInteger)ip.row >= [_visible count]) continue;
+            ACMessage *m = [_visible objectAtIndex:(NSUInteger)ip.row];
+            if (m.media != md) continue;
+            ACBubbleCell *cell = (ACBubbleCell *)[_table cellForRowAtIndexPath:ip];
+            if (cell) [cell configureWithMessage:m];
+        }
+    }
+    if (md != _wanted) return;
+    if (md.state == ACMediaDone) {
+        _wanted = nil;
+        int mode = md.openMode;
+        md.openMode = 0;
+        if (_appeared && mode != 0 && [md.localPath length]) [self openFile:md.localPath mode:mode];
+    } else if (md.state == ACMediaFailed) {
+        _wanted = nil;
+        UIAlertView *a = [[UIAlertView alloc] initWithTitle:@"Nie udało się pobrać"
+            message:[md.error length] ? md.error : @"Spróbuj jeszcze raz."
+            delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
+        [a show];
+    }
 }
 
 - (void)scrollViewWillBeginDragging:(UIScrollView *)sv

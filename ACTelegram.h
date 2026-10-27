@@ -6,6 +6,8 @@
 extern NSString *const ACTGStateDidChangeNotification;     /* zmiana stanu logowania / połączenia */
 extern NSString *const ACTGChatsDidChangeNotification;     /* zmiana listy czatów lub wiadomości; userInfo[@"chat"] = ACChat albo brak */
 
+extern NSString *const ACTGMediaDidChangeNotification;      /* postęp / koniec pobierania załącznika; userInfo[@"media"] = ACMedia, @"relayout" = NSNumber BOOL */
+
 typedef enum {
     ACTGStateOffline = 0,      /* niezalogowany */
     ACTGStateConnecting,       /* łączenie / logowanie w toku */
@@ -57,4 +59,10 @@ typedef enum {
 - (void)sendText:(NSString *)text toChat:(ACChat *)chat;
 - (void)markReadChat:(ACChat *)chat;
 
+@end
+
+/* załączniki (ACTelegramMedia.m) */
+@interface ACTelegram (Media)
+- (void)loadThumb:(ACMedia *)media;                          /* miniatura: z dysku od razu, inaczej w tle (powiadomienie ACTGMediaDidChange) */
+- (void)downloadMedia:(ACMedia *)media openMode:(int)mode;   /* pełny plik; mode: 1 podgląd po pobraniu, 2 "otwórz w…" */
 @end

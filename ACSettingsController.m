@@ -79,8 +79,8 @@
             cell.detailTextLabel.text = @"Usuwa sesję z tego telefonu";
         }
     } else if (ip.row == 0) {
-        cell.textLabel.text = @"AeroChat 0.4.0";
-        cell.detailTextLabel.text = @"Klient Telegrama: czaty, historia, wysyłanie, wyszukiwanie";
+        cell.textLabel.text = @"AeroChat 0.5.0";
+        cell.detailTextLabel.text = @"Klient Telegrama: czaty, wysyłanie, wyszukiwanie, załączniki";
         cell.selectionStyle = UITableViewCellSelectionStyleNone;
     } else {
         cell.textLabel.text = @"Wygląd";

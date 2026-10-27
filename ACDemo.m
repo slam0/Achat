@@ -2,6 +2,33 @@
 #import "ACTelegram.h"
 
 @implementation ACMessage
+
+- (NSString *)bubbleText
+{
+    NSString *body;
+    if (_media) {
+        if ([_media hasImageArea]) body = _text ? _text : @"";
+        else {
+            NSMutableString *s = [NSMutableString stringWithString:[_media label]];
+            NSString *st = [_media statusLine];
+            if ([st length]) [s appendFormat:@"\n%@", st];
+            if ([_text length]) [s appendFormat:@"\n%@", _text];
+            body = s;
+        }
+    } else body = _text ? _text : @"";
+    if ([_sender length]) return [body length] ? [NSString stringWithFormat:@"%@: %@", _sender, body] : _sender;
+    return body;
+}
+
+- (NSString *)summary
+{
+    NSString *body;
+    if (_media) body = [_text length] ? [NSString stringWithFormat:@"%@ %@", [_media label], _text] : [_media label];
+    else body = _text ? _text : @"";
+    if ([_sender length]) return [NSString stringWithFormat:@"%@: %@", _sender, body];
+    return body;
+}
+
 @end
 
 BOOL ACTextMatches(NSString *text, NSString *query)
@@ -22,8 +49,8 @@ BOOL ACTextMatches(NSString *text, NSString *query)
     }
     for (NSInteger i = (NSInteger)[_messages count] - 1; i >= 0; i--) {
         ACMessage *m = [_messages objectAtIndex:(NSUInteger)i];
-        if (ACTextMatches(m.text, query)) {
-            if (snippet) *snippet = m.outgoing ? [@"Ty: " stringByAppendingString:m.text] : m.text;
+        if (ACTextMatches([m summary], query)) {
+            if (snippet) *snippet = m.outgoing ? [@"Ty: " stringByAppendingString:[m summary]] : [m summary];
             return YES;
         }
     }
@@ -40,7 +67,7 @@ BOOL ACTextMatches(NSString *text, NSString *query)
 {
     ACMessage *m = [_messages lastObject];
     if (!m) return @"Brak wiadomości";
-    return m.outgoing ? [@"Ty: " stringByAppendingString:m.text] : m.text;
+    return m.outgoing ? [@"Ty: " stringByAppendingString:[m summary]] : [m summary];
 }
 
 - (NSString *)lastTime

@@ -1,4 +1,5 @@
 #import <UIKit/UIKit.h>
+#import "ACDemo.h"
 
 /* Wspólne widoki: komórki z połyskiem (metal, szkło Aero, grafit), nagłówki sekcji, komórka czatu. */
 
@@ -15,8 +16,8 @@
 /* Dymek wiadomości w rozmowie. */
 @interface ACBubbleCell : UITableViewCell
 + (ACBubbleCell *)bubbleCellForTable:(UITableView *)table;
-- (void)configureWithText:(NSString *)text time:(NSString *)time outgoing:(BOOL)outgoing;
-+ (CGFloat)heightForText:(NSString *)text width:(CGFloat)tableWidth;
+- (void)configureWithMessage:(ACMessage *)message;
++ (CGFloat)heightForMessage:(ACMessage *)message;
 @end
 
 UIView *ACHeaderForTitle(NSString *title);

@@ -14,7 +14,7 @@ include $(THEOS)/makefiles/common.mk
 
 APPLICATION_NAME = AeroChat
 
-AeroChat_FILES = main.m AppDelegate.m ACStore.m ACCrash.m ACTheme.m ACMetal.m ACViews.m ACDemo.m ACChatsController.m ACContactsController.m ACChatController.m ACSettingsController.m ACTelegram.m ACSetupController.m ACSlideView.m tg_bn.c tg_crypto.c tg_tl.c tg_mt.c ac_libc.c
+AeroChat_FILES = main.m AppDelegate.m ACStore.m ACCrash.m ACTheme.m ACMetal.m ACViews.m ACDemo.m ACChatsController.m ACContactsController.m ACChatController.m ACSettingsController.m ACTelegram.m ACTelegramMedia.m ACMedia.m ACSetupController.m tg_bn.c tg_crypto.c tg_tl.c tg_mt.c ac_libc.c
 AeroChat_FRAMEWORKS = UIKit Foundation CoreGraphics QuartzCore
 AeroChat_CFLAGS = -fobjc-arc -O2 -fno-stack-protector -D_FORTIFY_SOURCE=0 -Wno-deprecated-declarations -Wno-unused-command-line-argument
 

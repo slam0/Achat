@@ -1,6 +1,7 @@
 #import "ACViews.h"
 #import "ACTheme.h"
 #import "ACMetal.h"
+#import <QuartzCore/QuartzCore.h>
 
 static UIColor *C(int r, int g, int b, CGFloat a)
 {
@@ -178,9 +179,13 @@ static void Gradient(CGContextRef c, CGRect r, UIColor *top, UIColor *bottom)
 
 @implementation ACBubbleCell {
     UIImageView *_bubble;
+    UIImageView *_img;
+    UIView *_ovBg;
+    UILabel *_ov;
     UILabel *_text;
     UILabel *_time;
     BOOL _out;
+    CGSize _imgSize;
 }
 
 + (ACBubbleCell *)bubbleCellForTable:(UITableView *)table
@@ -197,6 +202,22 @@ static void Gradient(CGContextRef c, CGRect r, UIColor *top, UIColor *bottom)
         self.selectionStyle = UITableViewCellSelectionStyleNone;
         _bubble = [[UIImageView alloc] initWithFrame:CGRectZero];
         [self.contentView addSubview:_bubble];
+        _img = [[UIImageView alloc] initWithFrame:CGRectZero];
+        _img.contentMode = UIViewContentModeScaleAspectFill;
+        _img.clipsToBounds = YES;
+        _img.layer.cornerRadius = 6.0f;
+        _img.hidden = YES;
+        [self.contentView addSubview:_img];
+        _ovBg = [[UIView alloc] initWithFrame:CGRectZero];
+        _ovBg.backgroundColor = [UIColor colorWithWhite:0.0f alpha:0.55f];
+        _ovBg.layer.cornerRadius = 8.0f;
+        _ovBg.hidden = YES;
+        [self.contentView addSubview:_ovBg];
+        _ov = [[UILabel alloc] initWithFrame:CGRectZero];
+        _ov.backgroundColor = [UIColor clearColor];
+        _ov.textColor = [UIColor whiteColor];
+        _ov.font = [UIFont boldSystemFontOfSize:11.0f];
+        [_ovBg addSubview:_ov];
         _text = [[UILabel alloc] initWithFrame:CGRectZero];
         _text.backgroundColor = [UIColor clearColor];
         _text.numberOfLines = 0;
@@ -212,29 +233,54 @@ static void Gradient(CGContextRef c, CGRect r, UIColor *top, UIColor *bottom)
 
 + (CGSize)textSize:(NSString *)text
 {
+    if ([text length] == 0) return CGSizeZero;
     CGSize s = [text sizeWithFont:BUBBLE_FONT constrainedToSize:CGSizeMake(BUBBLE_MAXW, 4000) lineBreakMode:NSLineBreakByWordWrapping];
     return CGSizeMake((CGFloat)((int)(s.width + 0.99f)), (CGFloat)((int)(s.height + 0.99f)));
 }
 
-+ (CGFloat)heightForText:(NSString *)text width:(CGFloat)tableWidth
++ (CGFloat)bubbleHeightForText:(CGSize)ts image:(CGSize)is
 {
-    return [self textSize:text].height + 32.0f + 14.0f;
+    if (is.height > 0) return 8.0f + is.height + (ts.height > 0 ? 6.0f + ts.height + 12.0f : 8.0f);
+    return ts.height + 22.0f;
 }
 
-- (void)configureWithText:(NSString *)text time:(NSString *)time outgoing:(BOOL)outgoing
++ (CGFloat)heightForMessage:(ACMessage *)m
 {
-    _out = outgoing;
-    _bubble.image = ACBubbleImage(outgoing);
-    _text.text = text;
-    _text.textColor = ACBubbleTextColor(outgoing);
+    CGSize ts = [self textSize:[m bubbleText]];
+    CGSize is = (m.media && [m.media hasImageArea]) ? [m.media imageSize] : CGSizeZero;
+    return [self bubbleHeightForText:ts image:is] + 24.0f;
+}
+
+- (void)configureWithMessage:(ACMessage *)m
+{
+    _out = m.outgoing;
+    _bubble.image = ACBubbleImage(_out);
+    _text.text = [m bubbleText];
+    _text.textColor = ACBubbleTextColor(_out);
     const ACPalette *p = ACP();
-    BOOL shadowDark = outgoing || !p->light;
+    BOOL shadowDark = _out || !p->light;
     _text.shadowColor = shadowDark ? [UIColor colorWithWhite:0 alpha:0.35f] : [UIColor colorWithWhite:1 alpha:0.8f];
     _text.shadowOffset = CGSizeMake(0, shadowDark ? -1 : 1);
-    _time.text = time;
+    _time.text = m.time;
     _time.textColor = p->aero ? C(40, 90, 140, 0.9f) : ACSubtleColor();
     _time.shadowColor = p->light ? [UIColor colorWithWhite:1 alpha:0.7f] : [UIColor colorWithWhite:0 alpha:0.6f];
     _time.shadowOffset = CGSizeMake(0, p->light ? 1 : -1);
+
+    ACMedia *md = m.media;
+    if (md && [md hasImageArea]) {
+        _imgSize = [md imageSize];
+        _img.hidden = NO;
+        _img.image = md.thumb;
+        _img.backgroundColor = md.thumb ? [UIColor clearColor] : [UIColor colorWithWhite:0.5f alpha:0.35f];
+        NSString *ov = [md overlayText];
+        _ov.text = ov;
+        _ovBg.hidden = [ov length] == 0;
+    } else {
+        _imgSize = CGSizeZero;
+        _img.hidden = YES;
+        _img.image = nil;
+        _ovBg.hidden = YES;
+    }
     [self setNeedsLayout];
 }
 
@@ -242,13 +288,35 @@ static void Gradient(CGContextRef c, CGRect r, UIColor *top, UIColor *bottom)
 {
     [super layoutSubviews];
     CGFloat w = self.contentView.bounds.size.width;
-    CGSize ts = [ACBubbleCell textSize:_text.text ? _text.text : @""];
-    CGFloat bw = ts.width + 28.0f;
+    CGSize ts = [ACBubbleCell textSize:_text.text];
+    BOOL hasImg = _imgSize.height > 0;
+    CGFloat bw, pad;
+    if (hasImg) {
+        CGFloat cw = ts.width > _imgSize.width ? ts.width : _imgSize.width;
+        bw = cw + 24.0f;
+        pad = 12.0f;
+    } else {
+        bw = ts.width + 28.0f;
+        pad = 14.0f;
+    }
     if (bw < 54.0f) bw = 54.0f;
-    CGFloat bh = ts.height + 22.0f;
+    CGFloat bh = [ACBubbleCell bubbleHeightForText:ts image:_imgSize];
     CGFloat x = _out ? w - bw - 10.0f : 10.0f;
     _bubble.frame = CGRectMake(x, 6, bw, bh);
-    _text.frame = CGRectMake(x + 14.0f, 6 + 10.0f, ts.width, ts.height);
+    CGFloat ty = 6 + 10.0f;
+    if (hasImg) {
+        _img.frame = CGRectMake(x + pad, 6 + 8.0f, _imgSize.width, _imgSize.height);
+        ty = 6 + 8.0f + _imgSize.height + 6.0f;
+        if (!_ovBg.hidden) {
+            CGSize os = [_ov.text sizeWithFont:_ov.font];
+            CGFloat ow = os.width + 12.0f;
+            if (ow > _imgSize.width - 12.0f) ow = _imgSize.width - 12.0f;
+            CGFloat oh = os.height + 4.0f;
+            _ovBg.frame = CGRectMake(x + pad + 6.0f, 6 + 8.0f + _imgSize.height - 6.0f - oh, ow, oh);
+            _ov.frame = CGRectMake(6.0f, 2.0f, ow - 12.0f, os.height);
+        }
+    }
+    _text.frame = CGRectMake(x + pad, ty, ts.width, ts.height);
     CGFloat tw = 120.0f;
     _time.textAlignment = _out ? NSTextAlignmentRight : NSTextAlignmentLeft;
     _time.frame = CGRectMake(_out ? x + bw - tw - 4.0f : x + 4.0f, 6 + bh + 1, tw, 13);

@@ -1,4 +1,5 @@
 #import "ACTelegram.h"
+#import "ACTelegramPrivate.h"
 #import "ACStore.h"
 #import "ACConfig.h"
 #import <UIKit/UIKit.h>
@@ -13,7 +14,6 @@ NSString *const ACTGStateDidChangeNotification = @"ACTGStateDidChange";
 NSString *const ACTGChatsDidChangeNotification = @"ACTGChatsDidChange";
 
 #define TG_LAYER_FALLBACK 222
-typedef void (^ACTGDone)(id res, NSString *err, int code);
 
 /* ---------- pomocnicze ---------- */
 
@@ -107,6 +107,7 @@ static NSArray *ArrOf(id o) { return [o isKindOfClass:[NSArray class]] ? o : [NS
 @interface ACTGCall : NSObject
 @property (nonatomic, copy) NSString *fn;
 @property (nonatomic, copy) ACTGDone done;
+@property (nonatomic) BOOL raw;
 @end
 @implementation ACTGCall
 @end
@@ -334,6 +335,7 @@ static NSString *DCFallbackIP(int dc)
 
 - (void)closeConnection
 {
+    [self mediaSessionEnded];
     @synchronized(self) {
         _gen++;
         if (_conn) tg_conn_close(_conn);
@@ -482,7 +484,29 @@ static NSString *DCFallbackIP(int dc)
 
 /* ---------- zapytania ---------- */
 
-- (void)call:(NSDictionary *)obj done:(ACTGDone)done
+- (NSDictionary *)wrapInit:(NSDictionary *)obj
+{
+    UIDevice *dev = [UIDevice currentDevice];
+    NSDictionary *init = [NSDictionary dictionaryWithObjectsAndKeys:
+        @"initConnection", @"_",
+        [NSNumber numberWithInt:self.apiId], @"api_id",
+        [dev model], @"device_model",
+        [dev systemVersion], @"system_version",
+        @"0.5.0", @"app_version",
+        @"pl", @"system_lang_code",
+        @"", @"lang_pack",
+        @"pl", @"lang_code",
+        obj, @"query", nil];
+    return [NSDictionary dictionaryWithObjectsAndKeys:@"invokeWithLayer", @"_", [NSNumber numberWithInt:[self layer]], @"layer", init, @"query", nil];
+}
+
+- (int)homeDC { return _dc; }
+- (BOOL)connectedHome { return _connOK; }
+
+- (void)call:(NSDictionary *)obj done:(ACTGDone)done { [self call:obj raw:NO done:done]; }
+- (void)callRaw:(NSDictionary *)obj done:(ACTGDone)done { [self call:obj raw:YES done:done]; }
+
+- (void)call:(NSDictionary *)obj raw:(BOOL)raw done:(ACTGDone)done
 {
     NSString *fn = [obj objectForKey:@"_"];
     NSString *fail = nil;
@@ -494,18 +518,7 @@ static NSString *DCFallbackIP(int dc)
             NSDictionary *send = obj;
             BOOL wrapped = NO;
             if (_needInit) {
-                UIDevice *dev = [UIDevice currentDevice];
-                NSDictionary *init = [NSDictionary dictionaryWithObjectsAndKeys:
-                    @"initConnection", @"_",
-                    [NSNumber numberWithInt:self.apiId], @"api_id",
-                    [dev model], @"device_model",
-                    [dev systemVersion], @"system_version",
-                    @"0.4.0", @"app_version",
-                    @"pl", @"system_lang_code",
-                    @"", @"lang_pack",
-                    @"pl", @"lang_code",
-                    obj, @"query", nil];
-                send = [NSDictionary dictionaryWithObjectsAndKeys:@"invokeWithLayer", @"_", [NSNumber numberWithInt:[self layer]], @"layer", init, @"query", nil];
+                send = [self wrapInit:obj];
                 wrapped = YES;
             }
             NSString *encErr = nil;
@@ -519,6 +532,7 @@ static NSString *DCFallbackIP(int dc)
                     ACTGCall *c = [[ACTGCall alloc] init];
                     c.fn = fn;
                     c.done = done;
+                    c.raw = raw;
                     [_calls setObject:c forKey:[NSNumber numberWithUnsignedInt:tok]];
                 }
             }
@@ -537,6 +551,11 @@ static NSString *DCFallbackIP(int dc)
         [_calls removeObjectForKey:k];
     }
     if (!c) return;
+    if (c.raw) {
+        ACTGDone rd = c.done;
+        dispatch_async(dispatch_get_main_queue(), ^{ if (rd) rd(d, nil, 0); });
+        return;
+    }
     id json = [self decode:d function:c.fn];
     ACTGDone done = c.done;
     dispatch_async(dispatch_get_main_queue(), ^{
@@ -797,6 +816,7 @@ static NSString *DCFallbackIP(int dc)
 - (void)wipeSession
 {
     [self closeConnection];
+    [self mediaWipe];
     _authorized = NO;
     _codeHash = nil;
     ACStore *st = [ACStore shared];
@@ -984,13 +1004,23 @@ static NSString *MediaLabel(NSDictionary *media)
     if ([t isEqualToString:@"messageService"]) text = @"[wiadomość serwisowa]";
     else {
         text = StrOf([m objectForKey:@"message"]);
-        NSString *ml = MediaLabel(DictOf([m objectForKey:@"media"]));
-        if ([ml length]) text = [text length] ? [NSString stringWithFormat:@"%@ %@", ml, text] : ml;
-        if ([text length] == 0) text = @"[wiadomość]";
+        NSDictionary *md = DictOf([m objectForKey:@"media"]);
+        ACMedia *media = [ACMedia mediaFromJSON:md];
+        if (media) {
+            media.msgId = am.msgId;
+            media.peerKind = chat.peerKind;
+            media.peerId = chat.peerId;
+            media.peerAccess = chat.accessHash;
+            am.media = media;                     /* tekst to tylko podpis */
+        } else {
+            NSString *ml = MediaLabel(md);
+            if ([ml length]) text = [text length] ? [NSString stringWithFormat:@"%@ %@", ml, text] : ml;
+            if ([text length] == 0) text = @"[wiadomość]";
+        }
     }
     if (chat.isGroup && !am.outgoing && ![t isEqualToString:@"messageService"]) {
         NSString *sn = [self senderNameOf:m];
-        if ([sn length]) text = [NSString stringWithFormat:@"%@: %@", sn, text];
+        if ([sn length]) am.sender = sn;
     }
     am.text = text;
     return am;
@@ -1250,7 +1280,9 @@ static NSString *MediaLabel(NSDictionary *media)
             ACMessage *nm = [self messageFrom:m chat:c];
             for (NSUInteger i = 0; i < [c.messages count]; i++) {
                 ACMessage *old = [c.messages objectAtIndex:i];
-                if (old.msgId == nm.msgId) { [c.messages replaceObjectAtIndex:i withObject:nm]; [self notifyChats:c]; break; }
+                if (old.msgId == nm.msgId) {
+                    if (old.media && nm.media && old.media.mediaId == nm.media.mediaId) nm.media = old.media;
+                    [c.messages replaceObjectAtIndex:i withObject:nm]; [self notifyChats:c]; break; }
             }
         }
     } else if ([t isEqualToString:@"updateDeleteMessages"]) {

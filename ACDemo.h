@@ -1,14 +1,19 @@
 #import <Foundation/Foundation.h>
+#import "ACMedia.h"
 
 /* Dane demonstracyjne (etap 1: sam wygląd, bez połączenia z Telegramem). */
 
 @interface ACMessage : NSObject
-@property (nonatomic, copy) NSString *text, *time;
+@property (nonatomic, copy) NSString *text, *time;        /* treść albo podpis pod załącznikiem */
+@property (nonatomic, copy) NSString *sender;             /* nazwa nadawcy w grupie (albo nil) */
+@property (nonatomic, strong) ACMedia *media;             /* załącznik (albo nil) */
 @property (nonatomic) BOOL outgoing;
 /* tylko wiadomości z Telegrama */
 @property (nonatomic) int msgId, date;
 @property (nonatomic) long long randomId;
 @property (nonatomic) BOOL pending, failed;
+- (NSString *)bubbleText;      /* tekst w dymku (bez miniatury) */
+- (NSString *)summary;         /* podgląd na liście czatów i do wyszukiwania */
 @end
 
 @interface ACChat : NSObject

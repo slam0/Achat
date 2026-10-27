@@ -1,5 +1,4 @@
 #import "ACSetupController.h"
-#import "ACSlideView.h"
 #import "ACTelegram.h"
 #import "ACStore.h"
 #import "ACTheme.h"
@@ -49,61 +48,112 @@ static UILabel *ShadowLabel(CGRect frame, NSString *text, UIFont *font, UIColor 
     [self.navigationController setNavigationBarHidden:YES animated:animated];
 }
 
+/* ikona-dymek rysowana kodem (bez plików graficznych) */
+static UIImage *WelcomeIcon(CGFloat s)
+{
+    UIGraphicsBeginImageContextWithOptions(CGSizeMake(s, s), NO, 0.0f);
+    CGContextRef c = UIGraphicsGetCurrentContext();
+    CGRect r = CGRectMake(0, 0, s, s);
+    UIBezierPath *clip = [UIBezierPath bezierPathWithRoundedRect:CGRectInset(r, 1, 1) cornerRadius:s * 0.22f];
+    CGContextSaveGState(c);
+    [clip addClip];
+    CGColorSpaceRef cs = CGColorSpaceCreateDeviceRGB();
+    CGFloat col[8] = { 0.42f, 0.62f, 0.86f, 1.0f, 0.12f, 0.32f, 0.62f, 1.0f };
+    CGGradientRef g = CGGradientCreateWithColorComponents(cs, col, NULL, 2);
+    CGContextDrawLinearGradient(c, g, CGPointMake(0, 0), CGPointMake(0, s), 0);
+    CGGradientRelease(g);
+    CGColorSpaceRelease(cs);
+    [[UIColor colorWithWhite:1.0f alpha:0.22f] setFill];
+    CGContextFillRect(c, CGRectMake(0, 0, s, s * 0.5f));
+    CGContextRestoreGState(c);
+    /* biały dymek z ogonkiem */
+    CGRect bub = CGRectMake(s * 0.18f, s * 0.22f, s * 0.64f, s * 0.44f);
+    UIBezierPath *bp = [UIBezierPath bezierPathWithRoundedRect:bub cornerRadius:s * 0.14f];
+    [bp moveToPoint:CGPointMake(s * 0.30f, s * 0.64f)];
+    [bp addLineToPoint:CGPointMake(s * 0.26f, s * 0.80f)];
+    [bp addLineToPoint:CGPointMake(s * 0.46f, s * 0.65f)];
+    CGContextSaveGState(c);
+    CGContextSetShadowWithColor(c, CGSizeMake(0, -1), 2, [UIColor colorWithWhite:0 alpha:0.45f].CGColor);
+    [[UIColor whiteColor] setFill];
+    [bp fill];
+    CGContextRestoreGState(c);
+    [[UIColor colorWithRed:0.18f green:0.40f blue:0.70f alpha:1.0f] setFill];
+    CGFloat d = s * 0.055f;
+    for (int i = 0; i < 3; i++) {
+        CGFloat cx = s * (0.36f + 0.14f * (CGFloat)i);
+        CGContextFillEllipseInRect(c, CGRectMake(cx - d, s * 0.44f - d, d * 2, d * 2));
+    }
+    UIImage *img = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
+    return img;
+}
+
 - (void)viewDidLoad
 {
     [super viewDidLoad];
     CGRect b = self.view.bounds;
     [self.view addSubview:ACLinenBackgroundView(b)];
     CGFloat w = b.size.width, h = b.size.height;
+    BOOL tall = h > 440.0f;
 
-    NSString *big = self.finished ? @"Gotowe" : @"AeroChat";
-    UILabel *title = ShadowLabel(CGRectMake(10, h * 0.22f, w - 20, 90), big, Light(self.finished ? 64.0f : 62.0f), [UIColor whiteColor], NSTextAlignmentCenter);
+    CGFloat iconS = 96.0f;
+    CGFloat y = tall ? 44.0f : 20.0f;
+    UIImageView *icon = [[UIImageView alloc] initWithImage:WelcomeIcon(iconS)];
+    icon.frame = CGRectMake((w - iconS) / 2.0f, y, iconS, iconS);
+    icon.autoresizingMask = UIViewAutoresizingFlexibleLeftMargin | UIViewAutoresizingFlexibleRightMargin | UIViewAutoresizingFlexibleBottomMargin;
+    [self.view addSubview:icon];
+    y += iconS + 14.0f;
+
+    NSString *big = self.finished ? @"Gotowe" : @"Witaj w AeroChat";
+    UILabel *title = ShadowLabel(CGRectMake(10, y, w - 20, 44), big, Light(34.0f), [UIColor whiteColor], NSTextAlignmentCenter);
     title.numberOfLines = 1;
     title.adjustsFontSizeToFitWidth = YES;
-    title.minimumFontSize = 30.0f;
+    title.minimumFontSize = 22.0f;
     title.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleBottomMargin;
     [self.view addSubview:title];
+    y += 50.0f;
 
     NSString *sub;
     if (self.finished) {
         NSString *n = [ACTelegram shared].userName;
         sub = [n length] ? [NSString stringWithFormat:@"Zalogowano jako %@.\nTwoje czaty pojawią się za chwilę.", n] : @"Zalogowano do Telegrama.\nTwoje czaty pojawią się za chwilę.";
     } else {
-        sub = @"Telegram na iOS 6";
+        sub = @"Telegram na starym iPhonie,\nw wyglądzie iOS 6.";
     }
-    UILabel *sl = ShadowLabel(CGRectMake(20, h * 0.22f + 88, w - 40, 60), sub, [UIFont fontWithName:@"HelveticaNeue" size:18.0f] ? [UIFont fontWithName:@"HelveticaNeue" size:18.0f] : [UIFont systemFontOfSize:18.0f],
-                              [UIColor colorWithWhite:0.86f alpha:1.0f], NSTextAlignmentCenter);
+    UIFont *sf = [UIFont fontWithName:@"HelveticaNeue" size:17.0f];
+    if (!sf) sf = [UIFont systemFontOfSize:17.0f];
+    UILabel *sl = ShadowLabel(CGRectMake(20, y, w - 40, 48), sub, sf, [UIColor colorWithWhite:0.88f alpha:1.0f], NSTextAlignmentCenter);
     sl.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleBottomMargin;
     [self.view addSubview:sl];
 
     if (self.finished) {
-        UIButton *go = ACGelButton(@"Zaczynamy", 0, CGRectMake(20, h - 96 + 20, w - 40, 52));
+        UIButton *go = ACGelButton(@"Zaczynamy", 0, CGRectMake(20, h - 76, w - 40, 52));
         go.titleLabel.font = [UIFont boldSystemFontOfSize:20.0f];
         go.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleTopMargin;
         [go addTarget:self action:@selector(finishTapped) forControlEvents:UIControlEventTouchUpInside];
         [self.view addSubview:go];
     } else {
+        UIButton *start = ACGelButton(@"Zaloguj się numerem telefonu", 0, CGRectMake(20, h - 120, w - 40, 52));
+        start.titleLabel.font = [UIFont boldSystemFontOfSize:18.0f];
+        start.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleTopMargin;
+        [start addTarget:self action:@selector(startTapped) forControlEvents:UIControlEventTouchUpInside];
+        [self.view addSubview:start];
+
         UIButton *skip = [UIButton buttonWithType:UIButtonTypeCustom];
-        skip.frame = CGRectMake(40, h - 96 - 40, w - 80, 34);
+        skip.frame = CGRectMake(40, h - 60, w - 80, 40);
         skip.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleTopMargin;
-        [skip setTitle:@"Pomiń: zostań w trybie demo" forState:UIControlStateNormal];
-        [skip setTitleColor:[UIColor colorWithWhite:0.80f alpha:1.0f] forState:UIControlStateNormal];
+        [skip setTitle:@"Nie teraz, zostań w trybie demo" forState:UIControlStateNormal];
+        [skip setTitleColor:[UIColor colorWithWhite:0.82f alpha:1.0f] forState:UIControlStateNormal];
         [skip setTitleColor:[UIColor whiteColor] forState:UIControlStateHighlighted];
         skip.titleLabel.font = [UIFont systemFontOfSize:15.0f];
         skip.titleLabel.shadowColor = [UIColor colorWithWhite:0.0f alpha:0.6f];
         skip.titleLabel.shadowOffset = CGSizeMake(0, -1);
         [skip addTarget:self action:@selector(skipTapped) forControlEvents:UIControlEventTouchUpInside];
         [self.view addSubview:skip];
-
-        ACSlideView *slide = [[ACSlideView alloc] initWithFrame:CGRectMake(0, h - 96, w, 96)];
-        slide.autoresizingMask = UIViewAutoresizingFlexibleWidth | UIViewAutoresizingFlexibleTopMargin;
-        slide.title = @"przesuń, aby skonfigurować";
-        [slide addTarget:self action:@selector(slid) forControlEvents:UIControlEventValueChanged];
-        [self.view addSubview:slide];
     }
 }
 
-- (void)slid
+- (void)startTapped
 {
     ACSetupFormController *f = [[ACSetupFormController alloc] initWithStyle:UITableViewStyleGrouped];
     [self.navigationController pushViewController:f animated:YES];
