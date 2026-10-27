@@ -1,4 +1,4 @@
 #import <UIKit/UIKit.h>
 
-@interface ACContactsController : UITableViewController
+@interface ACContactsController : UITableViewController <UISearchBarDelegate>
 @end

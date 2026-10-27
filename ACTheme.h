@@ -1,7 +1,7 @@
 #import <UIKit/UIKit.h>
 
-/* Wygląd w stylu iOS 6 / Frutiger Aero: szczotkowany metal (aluminium, mosiądz, różowe złoto),
-   błyszczące szkło "Aero" z niebem i bąblami oraz klasyczny grafit z połyskiem. */
+/* Wygląd w stylu iOS 6: klasyczny szary iPhone (domyślny), szczotkowany metal (aluminium, mosiądz,
+   różowe złoto), ciemne motywy z połyskiem oraz stonowane szkło Frutiger Aero. */
 
 extern NSString *const ACAppearanceDidChangeNotification;   /* zmiana motywu */
 
@@ -27,6 +27,7 @@ typedef struct {
     int light;
     int metal;                                  /* 1 = szczotkowany metal */
     int aero;                                   /* 1 = szkło Aero z niebem */
+    int classic;                                /* 1 = klasyczny szary iPhone (iOS 6) */
 } ACPalette;
 
 const ACPalette *ACP(void);
@@ -66,4 +67,6 @@ UIImage *ACBubbleImage(BOOL outgoing);                      /* dymek wiadomości
 UIImage *ACBadgeImage(void);                                /* czerwona pastylka licznika (rozciągliwa) */
 UIImage *ACInputFieldImage(void);                           /* wpuszczone pole tekstowe (rozciągliwe) */
 UIImage *ACInputBarImage(void);                             /* tło paska pisania (rozciągliwe) */
+UIImage *ACSearchFieldImage(void);                          /* pole wyszukiwania (rozciągliwe) */
+UISearchBar *ACMakeSearchBar(id<UISearchBarDelegate> delegate, NSString *placeholder);
 UIColor *ACBubbleTextColor(BOOL outgoing);

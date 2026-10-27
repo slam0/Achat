@@ -5,6 +5,8 @@
 #import "ACChatsController.h"
 #import "ACContactsController.h"
 #import "ACSettingsController.h"
+#import "ACTelegram.h"
+#import "ACSetupController.h"
 
 @implementation AppDelegate
 
@@ -74,6 +76,15 @@
                              completion:^(BOOL finished) { [cover removeFromSuperview]; }];
         });
     }
+    /* Telegram: wznów zapisaną sesję albo pokaż okno setup przy pierwszym uruchomieniu */
+    ACTelegram *tg = [ACTelegram shared];
+    if (tg.authorized) {
+        [tg resume];
+    } else if (![[[ACStore shared] objectForKey:@"setupSeen"] boolValue]) {
+        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(1.6 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+            if (!lastReport) [ACSetupController presentFrom:self.window.rootViewController];
+        });
+    }
     if (lastReport) {
         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(2.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
             UIAlertView *a = [[UIAlertView alloc] initWithTitle:@"AeroChat – diagnostyka" message:lastReport delegate:nil cancelButtonTitle:@"OK" otherButtonTitles:nil];
@@ -83,7 +94,8 @@
     return YES;
 }
 
-- (void)applicationDidEnterBackground:(UIApplication *)application { [[ACStore shared] save]; ACCrumbCleanExit(); }
+- (void)applicationDidEnterBackground:(UIApplication *)application { [[ACStore shared] save]; [[ACTelegram shared] enteredBackground]; ACCrumbCleanExit(); }
+- (void)applicationDidBecomeActive:(UIApplication *)application { [[ACTelegram shared] appBecameActive]; }
 - (void)applicationWillTerminate:(UIApplication *)application { [[ACStore shared] save]; ACCrumbCleanExit(); }
 
 @end

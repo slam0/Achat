@@ -76,3 +76,20 @@ WL_PLAIN void *memmove(void *dst, const void *src, size_t n)
     }
     return dst;
 }
+
+WL_PLAIN int strcmp(const char *a, const char *b)
+{
+    for (;; a++, b++) {
+        unsigned char x = (unsigned char)*a, y = (unsigned char)*b;
+        if (x != y) return (int)x - (int)y;
+        if (x == 0) return 0;
+    }
+}
+
+/* clang zamienia niektóre pętle wypełniania na to wywołanie, a zastępczy SDK go nie zna */
+WL_PLAIN void memset_pattern16(void *dst, const void *pattern, size_t len)
+{
+    unsigned char *d = (unsigned char *)dst;
+    const unsigned char *p = (const unsigned char *)pattern;
+    for (size_t i = 0; i < len; i++) d[i] = p[i & 15];
+}

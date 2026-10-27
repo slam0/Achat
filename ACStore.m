@@ -26,11 +26,19 @@ static NSString *PlistPath(void)
     return self;
 }
 
-- (NSInteger)themeIndex { return [[_d objectForKey:@"theme"] integerValue]; }
+- (NSInteger)themeIndex { return [[_d objectForKey:@"theme2"] integerValue]; }
 
 - (void)setThemeIndex:(NSInteger)i
 {
-    [_d setObject:[NSNumber numberWithInteger:i] forKey:@"theme"];
+    [_d setObject:[NSNumber numberWithInteger:i] forKey:@"theme2"];
+    [self save];
+}
+
+- (id)objectForKey:(NSString *)key { return [_d objectForKey:key]; }
+
+- (void)setObject:(id)obj forKey:(NSString *)key
+{
+    if (obj) [_d setObject:obj forKey:key]; else [_d removeObjectForKey:key];
     [self save];
 }
 

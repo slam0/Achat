@@ -1,6 +1,7 @@
 #import "ACChatController.h"
 #import "ACTheme.h"
 #import "ACViews.h"
+#import "ACTelegram.h"
 
 #define BAR_H 46.0f
 
@@ -11,12 +12,19 @@
     UITextField *_field;
     UIButton *_send;
     CGFloat _kb;
+    NSArray *_visible;          /* wiadomości na ekranie (wszystkie albo wyniki wyszukiwania) */
+    UISearchBar *_search;
+    NSString *_query;
+    BOOL _searching;
+    BOOL _appeared;
 }
 
 - (id)initWithChat:(ACChat *)chat
 {
     if ((self = [super initWithNibName:nil bundle:nil])) {
         _chat = chat;
+        _query = @"";
+        _visible = [chat.messages copy];
         self.title = chat.name;
     }
     return self;
@@ -38,6 +46,7 @@
 - (void)viewDidLoad
 {
     [super viewDidLoad];
+    self.navigationItem.rightBarButtonItem = ACBarButton(@"Szukaj", self, @selector(toggleSearch));
     CGRect b = self.view.bounds;
     UIView *bg = ACBackgroundView(b);
     [self.view addSubview:bg];
@@ -81,7 +90,14 @@
     [_bar addSubview:_field];
     [self.view addSubview:_bar];
 
+    if (_chat.peerKind != 0 && !_chat.canWrite) {
+        _field.enabled = NO;
+        _field.placeholder = @"Tylko do odczytu";
+        _send.enabled = NO;
+    }
+
     NSNotificationCenter *nc = [NSNotificationCenter defaultCenter];
+    [nc addObserver:self selector:@selector(telegramChanged:) name:ACTGChatsDidChangeNotification object:nil];
     [nc addObserver:self selector:@selector(keyboardWillChange:) name:UIKeyboardWillShowNotification object:nil];
     [nc addObserver:self selector:@selector(keyboardWillChange:) name:UIKeyboardWillHideNotification object:nil];
 }
@@ -90,6 +106,33 @@
 {
     [super viewDidAppear:animated];
     [self scrollToBottomAnimated:NO];
+    _appeared = YES;
+    if (_chat.peerKind != 0) {
+        if (!_chat.historyLoaded) [[ACTelegram shared] loadHistoryForChat:_chat];
+        [[ACTelegram shared] markReadChat:_chat];
+    }
+}
+
+- (void)viewWillDisappear:(BOOL)animated
+{
+    [super viewWillDisappear:animated];
+    _appeared = NO;
+}
+
+/* nowe wiadomości, historia i potwierdzenia z Telegrama */
+- (void)telegramChanged:(NSNotification *)n
+{
+    ACChat *c = [[n userInfo] objectForKey:@"chat"];
+    if (c && c != _chat) return;
+    if (!self.isViewLoaded) return;
+    BOOL wasAtBottom = YES;
+    if (_table.contentSize.height > _table.bounds.size.height) {
+        wasAtBottom = _table.contentOffset.y + _table.bounds.size.height >= _table.contentSize.height - 80.0f;
+    }
+    [self rebuildVisible];
+    [_table reloadData];
+    if (wasAtBottom) [self scrollToBottomAnimated:_appeared];
+    if (_appeared && _chat.unread > 0) [[ACTelegram shared] markReadChat:_chat];
 }
 
 - (void)relayout
@@ -112,9 +155,63 @@
     } completion:^(BOOL f) { [self scrollToBottomAnimated:YES]; }];
 }
 
+/* ---- wyszukiwanie w rozmowie ---- */
+
+- (void)rebuildVisible
+{
+    if (!_searching || [_query length] == 0) {
+        _visible = [_chat.messages copy];
+    } else {
+        NSMutableArray *hits = [NSMutableArray array];
+        for (ACMessage *m in _chat.messages) {
+            if (ACTextMatches(m.text, _query)) [hits addObject:m];
+        }
+        _visible = hits;
+    }
+    if (_searching && [_query length]) self.title = [NSString stringWithFormat:@"Znaleziono: %lu", (unsigned long)[_visible count]];
+    else self.title = _chat.name;
+}
+
+- (void)toggleSearch
+{
+    if (_searching) { [self endSearch]; return; }
+    _searching = YES;
+    _query = @"";
+    _search = ACMakeSearchBar(self, @"Szukaj w rozmowie");
+    _table.tableHeaderView = _search;
+    self.navigationItem.rightBarButtonItem = ACBarButton(@"Gotowe", self, @selector(toggleSearch));
+    [self rebuildVisible];
+    [_table reloadData];
+    [_table setContentOffset:CGPointZero animated:NO];
+    [_search becomeFirstResponder];
+}
+
+- (void)endSearch
+{
+    _searching = NO;
+    _query = @"";
+    [_search resignFirstResponder];
+    _table.tableHeaderView = nil;
+    _search = nil;
+    self.navigationItem.rightBarButtonItem = ACBarButton(@"Szukaj", self, @selector(toggleSearch));
+    [self rebuildVisible];
+    [_table reloadData];
+    [self scrollToBottomAnimated:NO];
+}
+
+- (void)searchBar:(UISearchBar *)sb textDidChange:(NSString *)text
+{
+    _query = [text copy];
+    [self rebuildVisible];
+    [_table reloadData];
+}
+
+- (void)searchBarSearchButtonClicked:(UISearchBar *)sb { [sb resignFirstResponder]; }
+
 - (void)scrollToBottomAnimated:(BOOL)animated
 {
-    NSInteger n = (NSInteger)[_chat.messages count];
+    if (_searching) return;
+    NSInteger n = (NSInteger)[_visible count];
     if (n == 0) return;
     [_table scrollToRowAtIndexPath:[NSIndexPath indexPathForRow:n - 1 inSection:0] atScrollPosition:UITableViewScrollPositionBottom animated:animated];
 }
@@ -123,14 +220,21 @@
 {
     NSString *t = [_field.text stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceAndNewlineCharacterSet]];
     if ([t length] == 0) return;
-    [_chat addMessage:t outgoing:YES];
+    if (_searching) [self endSearch];
     _field.text = @"";
+    if (_chat.peerKind != 0) {
+        [[ACTelegram shared] sendText:t toChat:_chat];       /* dodaje dymek i powiadamia o zmianie */
+        return;
+    }
+    [_chat addMessage:t outgoing:YES];
+    [self rebuildVisible];
     [_table reloadData];
     [self scrollToBottomAnimated:YES];
     ACChat *chat = _chat;
     dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.9 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
         [chat addMessage:[ACDemo autoReplyFor:chat] outgoing:NO];
         if (self.isViewLoaded) {
+            [self rebuildVisible];
             [_table reloadData];
             [self scrollToBottomAnimated:YES];
         }
@@ -145,18 +249,18 @@
 
 - (NSInteger)tableView:(UITableView *)tv numberOfRowsInSection:(NSInteger)s
 {
-    return (NSInteger)[_chat.messages count];
+    return (NSInteger)[_visible count];
 }
 
 - (CGFloat)tableView:(UITableView *)tv heightForRowAtIndexPath:(NSIndexPath *)ip
 {
-    ACMessage *m = [_chat.messages objectAtIndex:(NSUInteger)ip.row];
+    ACMessage *m = [_visible objectAtIndex:(NSUInteger)ip.row];
     return [ACBubbleCell heightForText:m.text width:tv.bounds.size.width] + (ip.row == 0 ? 6.0f : 0.0f);
 }
 
 - (UITableViewCell *)tableView:(UITableView *)tv cellForRowAtIndexPath:(NSIndexPath *)ip
 {
-    ACMessage *m = [_chat.messages objectAtIndex:(NSUInteger)ip.row];
+    ACMessage *m = [_visible objectAtIndex:(NSUInteger)ip.row];
     ACBubbleCell *cell = [ACBubbleCell bubbleCellForTable:tv];
     [cell configureWithText:m.text time:m.time outgoing:m.outgoing];
     return cell;
@@ -165,6 +269,7 @@
 - (void)scrollViewWillBeginDragging:(UIScrollView *)sv
 {
     [_field resignFirstResponder];
+    [_search resignFirstResponder];
 }
 
 @end

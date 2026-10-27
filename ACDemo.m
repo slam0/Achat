@@ -1,9 +1,34 @@
 #import "ACDemo.h"
+#import "ACTelegram.h"
 
 @implementation ACMessage
 @end
 
+BOOL ACTextMatches(NSString *text, NSString *query)
+{
+    if (![query length]) return YES;
+    if (![text length]) return NO;
+    return [text rangeOfString:query options:NSCaseInsensitiveSearch | NSDiacriticInsensitiveSearch].location != NSNotFound;
+}
+
 @implementation ACChat
+
+- (BOOL)matchesQuery:(NSString *)query snippet:(NSString **)snippet
+{
+    if (![query length]) { if (snippet) *snippet = self.preview; return YES; }
+    if (ACTextMatches(_name, query) || ACTextMatches(_status, query)) {
+        if (snippet) *snippet = self.preview;
+        return YES;
+    }
+    for (NSInteger i = (NSInteger)[_messages count] - 1; i >= 0; i--) {
+        ACMessage *m = [_messages objectAtIndex:(NSUInteger)i];
+        if (ACTextMatches(m.text, query)) {
+            if (snippet) *snippet = m.outgoing ? [@"Ty: " stringByAppendingString:m.text] : m.text;
+            return YES;
+        }
+    }
+    return NO;
+}
 
 - (id)init
 {
@@ -57,6 +82,12 @@ static ACChat *Make(NSString *name, NSString *status, NSInteger unread, NSArray 
 @implementation ACDemo
 
 + (NSMutableArray *)chats
+{
+    ACTelegram *t = [ACTelegram shared];
+    return t.live ? t.chats : [self demoChats];
+}
+
++ (NSMutableArray *)demoChats
 {
     static NSMutableArray *all;
     if (all) return all;

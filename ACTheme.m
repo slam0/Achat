@@ -6,9 +6,10 @@ NSString *const ACAppearanceDidChangeNotification = @"ACAppearanceDidChangeNotif
 
 /* ---------- paleta i motywy ---------- */
 
-#define NTHEMES 10
+#define NTHEMES 8
 
-/* aero: 0 zwykły, 1 szkło Aero z niebem. metal: 0 zwykły, 1 szczotkowany metal (z przebarwieniem tint). */
+/* aero: 0 zwykły, 1 szkło Aero z niebem. metal: 0 zwykły, 1 szczotkowany metal (z przebarwieniem tint).
+   Motyw jasny bez metalu i Aero to klasyczny szary iPhone (iOS 6). W ciemnych motywach tintPct przebarwia grafit kolorem akcentu. */
 typedef struct {
     NSString *name;
     NSString *kind;
@@ -20,18 +21,15 @@ typedef struct {
 } ACThemeDef;
 
 static const ACThemeDef kThemes[NTHEMES] = {
-    { @"Frutiger Aero",  @"Szkło Aero", {   0, 150, 235 }, 1, 0, 1, {0,0,0}, 0,
-      { 38, 146, 228,   132, 210, 250,   224, 246, 255,   124, 206, 72,   44, 148, 40 } },
+    { @"iOS Szary",      @"Klasyczny",  {  22, 118, 220 }, 1, 0, 0, {0,0,0}, 0, {0} },
     { @"Aluminium",      @"Metal",      {  22, 118, 220 }, 1, 1, 0, {0,0,0}, 0, {0} },
-    { @"Aero Zieleń",    @"Szkło Aero", {  54, 176,  58 }, 1, 0, 1, {0,0,0}, 0,
-      { 16, 168, 190,   112, 226, 208,   218, 252, 238,   158, 222, 64,   58, 158, 38 } },
+    { @"Grafit",         @"Ciemny",     {  70, 150, 235 }, 0, 0, 0, {0,0,0}, 0, {0} },
+    { @"Granat",         @"Ciemny",     {  60, 120, 220 }, 0, 0, 0, {0,0,0}, 14, {0} },
+    { @"Bordo",          @"Ciemny",     { 214,  64,  74 }, 0, 0, 0, {0,0,0}, 12, {0} },
     { @"Mosiądz",        @"Metal",      { 176, 108,  18 }, 1, 1, 0, { 214, 172, 84 }, 44, {0} },
     { @"Różowe złoto",   @"Metal",      { 206,  80, 102 }, 1, 1, 0, { 230, 152, 142 }, 42, {0} },
-    { @"Grafit",         @"Grafit",     { 255, 138,   0 }, 0, 0, 0, {0,0,0}, 0, {0} },
-    { @"Błękit",         @"Grafit",     {  40, 150, 255 }, 0, 0, 0, {0,0,0}, 0, {0} },
-    { @"Czerwień",       @"Grafit",     { 240,  70,  70 }, 0, 0, 0, {0,0,0}, 0, {0} },
-    { @"Zieleń",         @"Grafit",     {  90, 200,  70 }, 0, 0, 0, {0,0,0}, 0, {0} },
-    { @"Fiolet",         @"Grafit",     { 170, 110, 255 }, 0, 0, 0, {0,0,0}, 0, {0} },
+    { @"Frutiger Aero",  @"Szkło",      {  30, 130, 205 }, 1, 0, 1, {0,0,0}, 0,
+      { 70, 140, 200,   150, 196, 230,   226, 240, 250,   120, 176, 140,   66, 128, 92 } },
 };
 
 static ACPalette gPal;
@@ -68,11 +66,11 @@ static void BuildPalette(NSInteger theme, ACPalette *p)
         SET(p->shadow, 0, 0, 0); SET(p->chrome, 26, 28, 33); SET(p->danger, 255, 115, 115);
         p->shadowAlpha = 0.8f; p->shadowDY = -1.0f; p->cellHiAlpha = 0.14f; p->cellLoAlpha = 0.55f;
         /* delikatne przebarwienie grafitu kolorem motywu (poza pierwszym, czystym grafitem) */
-        if (theme != 5) {
+        if (kThemes[theme].tintPct > 0) {
             int *group[] = { p->bg, p->bgHi, p->bgLo, p->barT1, p->barT2, p->barB1, p->barB2, p->barTint, p->cellT1, p->cellT2,
                              p->cellB1, p->cellB2, p->hdrT, p->hdrB, p->fieldT, p->fieldB, p->panelT, p->panelB,
                              p->sep, p->neutT, p->neutB, p->neutBorder, p->chrome };
-            for (size_t i = 0; i < sizeof(group) / sizeof(group[0]); i++) Mix(group[i], group[i], p->accent, 0.11f);
+            for (size_t i = 0; i < sizeof(group) / sizeof(group[0]); i++) Mix(group[i], group[i], p->accent, kThemes[theme].tintPct / 100.0f);
         }
         Copy3(p->hdrTitle, p->accent);
         Copy3(p->tabOn, p->accent);
@@ -138,6 +136,19 @@ static void BuildPalette(NSInteger theme, ACPalette *p)
         Mix(p->selT1, p->accent, white, 0.32f); Mix(p->selT2, p->accent, white, 0.10f);
         Mix(p->selB1, p->accent, black, 0.08f); Mix(p->selB2, p->accent, black, 0.22f);
     } else if (p->light) {
+        /* klasyczny szary iPhone: szare prążki w tle, białe wiersze, stalowoniebieski pasek */
+        p->classic = 1;
+        SET(p->bg, 226, 228, 231); SET(p->bgHi, 233, 235, 238); SET(p->bgLo, 214, 217, 221);
+        SET(p->barT1, 176, 190, 210); SET(p->barT2, 142, 160, 188); SET(p->barB1, 118, 139, 171); SET(p->barB2, 96, 118, 152);
+        SET(p->barTint, 112, 133, 165);
+        SET(p->cellT1, 255, 255, 255); SET(p->cellT2, 255, 255, 255); SET(p->cellB1, 255, 255, 255); SET(p->cellB2, 255, 255, 255);
+        SET(p->text, 20, 22, 26); SET(p->subtle, 112, 118, 128); SET(p->tabOff, 170, 172, 178); SET(p->tabOn, 255, 255, 255);
+        SET(p->hdrT, 164, 176, 192); SET(p->hdrB, 132, 146, 166); SET(p->hdrTitle, 255, 255, 255); SET(p->hdrRight, 238, 242, 248);
+        SET(p->fieldT, 226, 229, 234); SET(p->fieldB, 255, 255, 255); SET(p->fieldText, 20, 22, 26);
+        SET(p->sep, 214, 216, 220);
+        SET(p->neutT, 168, 178, 194); SET(p->neutB, 112, 124, 146); SET(p->neutBorder, 70, 80, 100);
+        SET(p->shadow, 255, 255, 255); SET(p->chrome, 74, 86, 108);
+        p->cellHiAlpha = 0.0f; p->cellLoAlpha = 0.0f;
         SET(p->plateT, 253, 254, 255); SET(p->plateM, 238, 241, 245); SET(p->plateB, 214, 219, 226);
         SET(p->chromeText, 255, 255, 255);
     } else {
@@ -313,27 +324,24 @@ static UIImage *AeroSkyImage(CGSize size)
     Fill(c, CGRectMake(0, base - 30, w, 46), RGBA(255, 255, 255, 0.30f), RGBA(255, 255, 255, 0.0f));
     CGContextRestoreGState(c);
     /* błyszczące bąble */
-    static const float bub[16][3] = {
-        { 0.10f, 0.62f, 22 }, { 0.26f, 0.74f, 12 }, { 0.40f, 0.58f, 34 }, { 0.58f, 0.70f, 16 },
-        { 0.72f, 0.55f, 26 }, { 0.88f, 0.68f, 40 }, { 0.16f, 0.88f, 30 }, { 0.50f, 0.90f, 18 },
-        { 0.80f, 0.90f, 24 }, { 0.92f, 0.42f, 14 }, { 0.05f, 0.40f, 18 }, { 0.34f, 0.34f, 10 },
-        { 0.66f, 0.28f, 14 }, { 0.50f, 0.46f, 8 }, { 0.22f, 0.14f, 12 }, { 0.94f, 0.80f, 10 } };
-    for (int i = 0; i < 16; i++) {
+    static const float bub[5][3] = {
+        { 0.12f, 0.66f, 14 }, { 0.84f, 0.60f, 18 }, { 0.30f, 0.88f, 10 }, { 0.70f, 0.90f, 12 }, { 0.92f, 0.36f, 9 } };
+    for (int i = 0; i < 5; i++) {
         CGFloat r = bub[i][2] * (w / 320.0f);
         CGPoint ctr = CGPointMake(w * bub[i][0], h * bub[i][1]);
         CGRect rect = CGRectMake(ctr.x - r, ctr.y - r, r * 2, r * 2);
         CGContextSaveGState(c);
         CGContextAddEllipseInRect(c, rect);
         CGContextClip(c);
-        Radial(c, ctr, r, RGBA(255, 255, 255, 0.04f), RGBA(210, 246, 255, 0.50f));
+        Radial(c, ctr, r, RGBA(255, 255, 255, 0.03f), RGBA(210, 236, 255, 0.30f));
         CGContextRestoreGState(c);
-        [RGBA(255, 255, 255, 0.70f) setStroke];
+        [RGBA(255, 255, 255, 0.50f) setStroke];
         UIBezierPath *ring = [UIBezierPath bezierPathWithOvalInRect:CGRectInset(rect, 0.5f, 0.5f)];
         ring.lineWidth = 1.0f;
         [ring stroke];
-        [RGBA(255, 255, 255, 0.85f) setFill];
+        [RGBA(255, 255, 255, 0.60f) setFill];
         [[UIBezierPath bezierPathWithOvalInRect:CGRectMake(ctr.x - r * 0.55f, ctr.y - r * 0.72f, r * 0.62f, r * 0.34f)] fill];
-        [RGBA(255, 255, 255, 0.35f) setFill];
+        [RGBA(255, 255, 255, 0.20f) setFill];
         [[UIBezierPath bezierPathWithOvalInRect:CGRectMake(ctr.x + r * 0.05f, ctr.y + r * 0.28f, r * 0.55f, r * 0.34f)] fill];
     }
     UIImage *img = UIGraphicsGetImageFromCurrentImageContext();
@@ -354,6 +362,20 @@ UIColor *ACBackgroundColor(void)
         UIImage *tile = UIGraphicsGetImageFromCurrentImageContext();
         UIGraphicsEndImageContext();
         gBgCache[t] = [UIColor colorWithPatternImage:tile];
+    }
+    if (!gBgCache[t] && ACP()->classic) {
+        /* szare pionowe prążki jak w tle tabel iOS 6 */
+        const ACPalette *p = ACP();
+        UIGraphicsBeginImageContextWithOptions(CGSizeMake(7, 4), YES, 0.0f);
+        [ACRGB(p->bg, 1) setFill];
+        UIRectFill(CGRectMake(0, 0, 7, 4));
+        [ACRGB(p->bgHi, 1) setFill];
+        UIRectFill(CGRectMake(0, 0, 3, 4));
+        [ACRGB(p->bgLo, 1) setFill];
+        UIRectFill(CGRectMake(3, 0, 1, 4));
+        UIImage *img = UIGraphicsGetImageFromCurrentImageContext();
+        UIGraphicsEndImageContext();
+        gBgCache[t] = [UIColor colorWithPatternImage:img];
     }
     if (!gBgCache[t]) {
         const ACPalette *p = ACP();
@@ -396,9 +418,22 @@ UIView *ACBackgroundView(CGRect frame)
 /* ---------- paski ---------- */
 
 /* Błyszczący pasek: jasna górna połowa (odbicie), ciemna dolna. W Aero dodatkowo szklany połysk i poświata. */
-static UIImage *BarImage(CGFloat height)
+static UIImage *BarImage(CGFloat height, BOOL tab)
 {
     const ACPalette *p = ACP();
+    if (tab && p->classic) {
+        /* czarny pasek zakładek jak w iOS 6 */
+        UIGraphicsBeginImageContextWithOptions(CGSizeMake(4.0f, height), NO, 0.0f);
+        CGContextRef c = UIGraphicsGetCurrentContext();
+        CGFloat half = (CGFloat)((int)(height / 2.0f));
+        Fill(c, CGRectMake(0, 0, 4, half), RGBA(74, 76, 80, 1), RGBA(36, 37, 40, 1));
+        Fill(c, CGRectMake(0, half, 4, height - half), RGBA(14, 15, 17, 1), RGBA(0, 0, 0, 1));
+        [RGBA(255, 255, 255, 0.30f) setFill];
+        CGContextFillRect(c, CGRectMake(0, 0, 4, 1));
+        UIImage *timg = UIGraphicsGetImageFromCurrentImageContext();
+        UIGraphicsEndImageContext();
+        return [timg resizableImageWithCapInsets:UIEdgeInsetsMake(0, 1, 0, 1)];
+    }
     if (p->metal) {
         UIGraphicsBeginImageContextWithOptions(CGSizeMake(192.0f, height), NO, 0.0f);
         CGContextRef c = UIGraphicsGetCurrentContext();
@@ -474,7 +509,7 @@ static UIImage *SelectionImage(void)
 void ACStyleNavigationBar(UINavigationBar *bar)
 {
     const ACPalette *p = ACP();
-    [bar setBackgroundImage:BarImage(44.0f) forBarMetrics:UIBarMetricsDefault];
+    [bar setBackgroundImage:BarImage(44.0f, NO) forBarMetrics:UIBarMetricsDefault];
     bar.tintColor = ACRGB(p->barTint, 1);
     if (p->metal) {
         bar.titleTextAttributes = [NSDictionary dictionaryWithObjectsAndKeys:
@@ -501,7 +536,7 @@ void ACStyleNavigationBar(UINavigationBar *bar)
 
 void ACStyleTabBar(UITabBar *bar)
 {
-    bar.backgroundImage = BarImage(49.0f);
+    bar.backgroundImage = BarImage(49.0f, YES);
     bar.selectionIndicatorImage = SelectionImage();
 }
 
@@ -657,6 +692,15 @@ UIImage *ACThemeSwatch(NSInteger index)
         if (p.tintAmt > 0) { Mix(t1, t1, p.tint, p.tintAmt); Mix(t2, t2, p.tint, p.tintAmt); Mix(b1, b1, p.tint, p.tintAmt); Mix(b2, b2, p.tint, p.tintAmt); }
         Fill(c, CGRectMake(0, 0, s, s * 0.5f), ACRGB(t1, 1), ACRGB(t2, 1));
         Fill(c, CGRectMake(0, s * 0.5f, s, s * 0.5f), ACRGB(b1, 1), ACRGB(b2, 1));
+    } else if (p.classic) {
+        /* szare prążki + stalowoniebieski pasek */
+        [ACRGB(p.bg, 1) setFill];
+        CGContextFillRect(c, CGRectMake(0, 0, s, s));
+        for (int x = 0; x < 34; x += 4) { [ACRGB(p.bgLo, 1) setFill]; CGContextFillRect(c, CGRectMake(x, 0, 1, s)); }
+        Fill(c, CGRectMake(0, 0, s, 11), ACRGB(p.barT1, 1), ACRGB(p.barB2, 1));
+        [RGBA(255, 255, 255, 1) setFill];
+        CGContextFillRect(c, CGRectMake(5, 15, s - 10, 6));
+        CGContextFillRect(c, CGRectMake(5, 23, s - 10, 6));
     } else if (p.aero) {
         Fill(c, CGRectMake(0, 0, s, s), ACRGB(p.skyT, 1), ACRGB(p.skyB, 1));
         Radial(c, CGPointMake(s * 0.78f, s * 0.22f), s * 0.6f, RGBA(255, 255, 255, 0.8f), RGBA(255, 255, 255, 0));
@@ -676,7 +720,7 @@ UIImage *ACThemeSwatch(NSInteger index)
         Fill(c, CGRectMake(0, 0, s, s * 0.5f), RGBA(255, 255, 255, 0.55f), RGBA(255, 255, 255, 0.10f));
     }
     CGContextRestoreGState(c);
-    [(p.metal ? RGBA(84, 90, 101, 1) : (p.aero ? RGBA(40, 110, 170, 1) : ACRGB(p.accentGelBorder, 1))) setStroke];
+    [(p.metal ? RGBA(84, 90, 101, 1) : (p.aero ? RGBA(40, 110, 170, 1) : (p.classic ? RGBA(110, 120, 138, 1) : ACRGB(p.accentGelBorder, 1)))) setStroke];
     shape.lineWidth = 1.0f;
     [shape stroke];
     UIImage *img = UIGraphicsGetImageFromCurrentImageContext();
@@ -686,7 +730,7 @@ UIImage *ACThemeSwatch(NSInteger index)
 
 UIActivityIndicatorViewStyle ACSpinnerStyle(void)
 {
-    return ACP()->metal ? UIActivityIndicatorViewStyleGray : UIActivityIndicatorViewStyleWhite;
+    return (ACP()->metal || ACP()->classic) ? UIActivityIndicatorViewStyleGray : UIActivityIndicatorViewStyleWhite;
 }
 
 UIColor *ACGlyphColor(void)
@@ -731,8 +775,8 @@ UIImage *ACAvatarImage(NSString *name, CGFloat d)
     NSString *key = [NSString stringWithFormat:@"%ld|%@|%d", (long)ACCurrentTheme(), name, (int)d];
     UIImage *hit = [cache objectForKey:key];
     if (hit) return hit;
-    static const int pal[8][3] = { { 36, 150, 235 }, { 64, 184, 84 }, { 242, 150, 28 }, { 224, 72, 96 },
-                                   { 150, 100, 220 }, { 24, 176, 176 }, { 230, 190, 30 }, { 120, 132, 150 } };
+    static const int pal[8][3] = { { 64, 128, 190 }, { 88, 150, 104 }, { 200, 130, 60 }, { 184, 82, 98 },
+                                   { 120, 98, 176 }, { 62, 140, 150 }, { 170, 146, 70 }, { 112, 122, 138 } };
     unsigned int h = 5381u;
     for (NSUInteger i = 0; i < [name length]; i++) h = h * 33u + (unsigned int)[name characterAtIndex:i];
     const int *col = pal[(h >> 3) & 7];
@@ -753,6 +797,7 @@ UIImage *ACAvatarImage(NSString *name, CGFloat d)
     CGContextClip(c);
     if (p->metal) Fill(c, ring, RGBA(252, 252, 253, 1), RGBA(150, 157, 168, 1));
     else if (p->aero) Fill(c, ring, RGBA(255, 255, 255, 1), RGBA(150, 214, 245, 1));
+    else if (p->classic) Fill(c, ring, RGBA(255, 255, 255, 1), RGBA(168, 174, 184, 1));
     else Fill(c, ring, RGBA(150, 154, 164, 1), RGBA(34, 36, 40, 1));
     CGContextRestoreGState(c);
     CGFloat ins = d * 0.065f + 1.0f;
@@ -765,7 +810,7 @@ UIImage *ACAvatarImage(NSString *name, CGFloat d)
     Mix(bot, col, (const int[3]){ 0, 0, 0 }, 0.30f);
     Fill(c, orb, ACRGB(top, 1), ACRGB(bot, 1));
     Radial(c, CGPointMake(orb.origin.x + orb.size.width * 0.5f, orb.origin.y + orb.size.height * 1.05f), orb.size.width * 0.7f,
-           RGBA(255, 255, 255, 0.40f), RGBA(255, 255, 255, 0.0f));
+           RGBA(255, 255, 255, 0.22f), RGBA(255, 255, 255, 0.0f));
     CGContextRestoreGState(c);
     /* połysk na górze kuli */
     CGRect gloss = CGRectMake(orb.origin.x + orb.size.width * 0.12f, orb.origin.y + orb.size.height * 0.05f,
@@ -773,7 +818,7 @@ UIImage *ACAvatarImage(NSString *name, CGFloat d)
     CGContextSaveGState(c);
     CGContextAddEllipseInRect(c, gloss);
     CGContextClip(c);
-    Fill(c, gloss, RGBA(255, 255, 255, 0.82f), RGBA(255, 255, 255, 0.12f));
+    Fill(c, gloss, RGBA(255, 255, 255, 0.50f), RGBA(255, 255, 255, 0.06f));
     CGContextRestoreGState(c);
     [RGBA(0, 0, 0, 0.45f) setStroke];
     UIBezierPath *edge = [UIBezierPath bezierPathWithOvalInRect:CGRectInset(orb, 0.25f, 0.25f)];
@@ -806,6 +851,8 @@ UIImage *ACBubbleImage(BOOL outgoing)
         Copy3(top, p->accentGelT); Copy3(bot, p->accentGelB); Copy3(border, p->accentGelBorder);
     } else if (p->aero) {
         SET(top, 255, 255, 255); SET(bot, 214, 238, 252); SET(border, 128, 176, 212);
+    } else if (p->classic) {
+        SET(top, 254, 254, 254); SET(bot, 226, 229, 234); SET(border, 150, 156, 168);
     } else if (p->metal) {
         SET(top, 252, 252, 253); SET(bot, 206, 211, 218); SET(border, 120, 126, 138);
         if (p->tintAmt > 0) { Mix(top, top, p->tint, p->tintAmt * 0.6f); Mix(bot, bot, p->tint, p->tintAmt); }
@@ -878,5 +925,52 @@ UIImage *ACInputFieldImage(void)
 
 UIImage *ACInputBarImage(void)
 {
-    return BarImage(44.0f);
+    return BarImage(44.0f, NO);
+}
+
+/* ---------- wyszukiwanie ---------- */
+
+UIImage *ACSearchFieldImage(void)
+{
+    const ACPalette *p = ACP();
+    CGFloat w = 28.0f, h = 28.0f;
+    UIGraphicsBeginImageContextWithOptions(CGSizeMake(w, h), NO, 0.0f);
+    CGContextRef c = UIGraphicsGetCurrentContext();
+    CGRect r = CGRectMake(0.5f, 0.5f, w - 1.0f, h - 1.5f);
+    UIBezierPath *shape = [UIBezierPath bezierPathWithRoundedRect:r cornerRadius:13.0f];
+    CGContextSaveGState(c);
+    [shape addClip];
+    Fill(c, CGRectMake(0, 0, w, h), ACRGB(p->fieldT, 1), ACRGB(p->fieldB, 1));
+    Fill(c, CGRectMake(0, 0, w, 5), RGBA(0, 0, 0, p->light ? 0.20f : 0.45f), RGBA(0, 0, 0, 0.0f));
+    CGContextRestoreGState(c);
+    [RGBA(0, 0, 0, p->light ? 0.55f : 0.85f) setStroke];
+    shape.lineWidth = 1.0f;
+    [shape stroke];
+    [RGBA(255, 255, 255, p->light ? 0.85f : 0.16f) setFill];
+    CGContextFillRect(c, CGRectMake(8, h - 1, w - 16, 1));
+    UIImage *img = UIGraphicsGetImageFromCurrentImageContext();
+    UIGraphicsEndImageContext();
+    return [img resizableImageWithCapInsets:UIEdgeInsetsMake(13, 13, 13, 13)];
+}
+
+UISearchBar *ACMakeSearchBar(id<UISearchBarDelegate> delegate, NSString *placeholder)
+{
+    const ACPalette *p = ACP();
+    UISearchBar *sb = [[UISearchBar alloc] initWithFrame:CGRectMake(0, 0, 320, 44)];
+    sb.autoresizingMask = UIViewAutoresizingFlexibleWidth;
+    sb.delegate = delegate;
+    sb.placeholder = placeholder;
+    sb.autocorrectionType = UITextAutocorrectionTypeNo;
+    sb.autocapitalizationType = UITextAutocapitalizationTypeNone;
+    sb.tintColor = ACRGB(p->barTint, 1);
+    sb.backgroundImage = BarImage(44.0f, NO);
+    [sb setSearchFieldBackgroundImage:ACSearchFieldImage() forState:UIControlStateNormal];
+    for (UIView *v in sb.subviews) {
+        if ([v isKindOfClass:[UITextField class]]) {
+            UITextField *tf = (UITextField *)v;
+            tf.textColor = ACRGB(p->fieldText, 1);
+            tf.keyboardAppearance = p->light ? UIKeyboardAppearanceDefault : UIKeyboardAppearanceAlert;
+        }
+    }
+    return sb;
 }

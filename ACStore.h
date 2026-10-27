@@ -4,5 +4,7 @@
 @interface ACStore : NSObject
 + (ACStore *)shared;
 @property (nonatomic) NSInteger themeIndex;
+- (id)objectForKey:(NSString *)key;
+- (void)setObject:(id)obj forKey:(NSString *)key;      /* nil usuwa; zapis od razu */
 - (void)save;
 @end
