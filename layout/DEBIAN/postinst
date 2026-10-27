@@ -1,0 +1,4 @@
+#!/bin/sh
+# Po instalacji odśwież listę ikon, żeby "AeroChat" pojawił się na ekranie
+uicache >/dev/null 2>&1
+exit 0
