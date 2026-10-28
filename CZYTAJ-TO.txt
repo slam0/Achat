@@ -1,15 +1,12 @@
-AeroChat 0.7.3 - nagłówek transport-cc w naszym dźwięku (test, czy rozmówca nas odbiera)
+AeroChat 0.7.5 - więcej diagnostyki (co dokładnie wysyła rozmówca)
 
-UWAGA: aplikacja nadal nie była testowana na prawdziwych telefonach ani z prawdziwym Telegramem -
-to kolejny krok szukania przyczyny, nie gwarancja naprawy.
+UWAGA: aplikacja nadal nie była testowana na prawdziwych telefonach ani z prawdziwym Telegramem.
 
 Wgraj tak samo jak poprzednio: pliki z głównego folderu do głównego folderu repo (nadpisz),
 Resources/Info.plist do folderu Resources. Potem Actions -> "Zbuduj AeroChat" -> Run workflow.
-Zainstaluj nowe .deb na KAŻDYM telefonie z AeroChat (w Ustawieniach ma być "AeroChat 0.7.3").
+Zainstaluj nowe .deb na KAŻDYM telefonie z AeroChat (w Ustawieniach ma być "AeroChat 0.7.5").
+Paczka zawiera też zmiany z 0.7.3 i 0.7.4.
 
-Test (każdy ~15 s, zrób zrzut ekranu ekranu rozmowy i wyślij):
-1. AeroChat -> dad's A71 (Tatus): zapisz, czy Tatus SŁYSZY Ciebie i czy Ty słyszysz Tatusia.
-2. AeroChat -> iPhone SE3 / 14: tak samo.
-3. Jeśli się da: SE3 dzwoni DO AeroChat.
-Na zrzucie patrz na liczbę przy "rtcp" - jeśli rośnie (np. kilkadziesiąt), rozmówca odbiera nasz dźwięk.
-Jeśli któraś próba się wysypie lub zachowa dziwnie, wyślij zrzut i napisz, co się stało.
+Test: zadzwoń z AeroChat do SE3 (i osobno do iPhone'a 14), po ok. 15 s zrób zrzut ekranu rozmowy
+(wszystkie linie, w tym nowa "RTCP SR ... RR ... CC ..."). Mów głośno do telefonu.
+Napisz też, czy na SE3 mikrofon jest włączony i czy ktoś kogoś słyszy.

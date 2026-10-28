@@ -79,7 +79,7 @@
             cell.detailTextLabel.text = @"Usuwa sesję z tego telefonu";
         }
     } else if (ip.row == 0) {
-        cell.textLabel.text = @"AeroChat 0.7.3";
+        cell.textLabel.text = @"AeroChat 0.7.5";
         cell.detailTextLabel.text = @"Klient Telegrama: czaty, wysyłanie, wyszukiwanie, załączniki";
         cell.selectionStyle = UITableViewCellSelectionStyleNone;
     } else {

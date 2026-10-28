@@ -106,7 +106,15 @@
     _name.text = nm;
     if (![nm isEqualToString:_avatarName]) { _avatarName = nm; _avatar.image = ACAvatarImage(nm, 120); }
     _status.text = c.statusText;
-    _status.font = [UIFont systemFontOfSize:[c.statusText rangeOfString:@"\n"].location != NSNotFound ? 12.0f : 17.0f];     /* linie diagnostyczne są drobniejsze */
+    {
+        BOOL diag = [c.statusText rangeOfString:@"\n"].location != NSNotFound;
+        CGRect b = self.view.bounds;
+        CGFloat top = b.size.height - 40 - 130;                        /* górna krawędź przycisków */
+        _status.font = [UIFont systemFontOfSize:diag ? 12.0f : 17.0f];     /* linie diagnostyczne są drobniejsze */
+        _avatar.hidden = diag;                                             /* przy diagnostyce miejsce na tekst */
+        _name.frame = CGRectMake(_name.frame.origin.x, diag ? 40.0f : 196.0f, _name.frame.size.width, _name.frame.size.height);
+        _status.frame = CGRectMake(16, diag ? 84.0f : 236.0f, b.size.width - 32, diag ? top - 88.0f : 110.0f);
+    }
     BOOL incoming = c.state == ACCallIncoming;
     BOOL ended = c.state == ACCallEnded || c.state == ACCallIdle;
     _accept.hidden = !incoming;

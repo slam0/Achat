@@ -125,6 +125,7 @@ static NSString *JSONText(id o)
     NSDate *_activeSince;
     NSTimer *_tick, *_ring;
     ACCallController *_ui;
+    BOOL _uiPresenting, _uiDismissing, _uiDismissAfterPresent;   /* przejścia ekranu rozmowy nie mogą się nakładać */
 }
 
 @synthesize state = _state, peerName = _peerName, outgoing = _outgoing, peerMuted = _peerMuted, muted = _muted, speaker = _speaker;
@@ -170,20 +171,34 @@ static NSString *JSONText(id o)
 
 - (void)presentUI
 {
+    UIViewController *vc;
     if (_ui) return;
-    UIViewController *vc = [[[UIApplication sharedApplication] keyWindow] rootViewController];
+    if (_uiDismissing) return;            /* poprzedni ekran jeszcze się zamyka; dokończy się w completion */
+    vc = [[[UIApplication sharedApplication] keyWindow] rootViewController];
     while (vc.presentedViewController) vc = vc.presentedViewController;
     if (!vc) return;
+    if ([vc isKindOfClass:[ACCallController class]]) return;
     _ui = [[ACCallController alloc] init];
     _ui.modalTransitionStyle = UIModalTransitionStyleCoverVertical;
-    [vc presentViewController:_ui animated:YES completion:nil];
+    _uiPresenting = YES;
+    _uiDismissAfterPresent = NO;
+    [vc presentViewController:_ui animated:YES completion:^{
+        _uiPresenting = NO;
+        if (_uiDismissAfterPresent || _state == ACCallIdle) { _uiDismissAfterPresent = NO; [self dismissUI]; }
+    }];
 }
 
 - (void)dismissUI
 {
     ACCallController *u = _ui;
+    if (!u) return;
+    if (_uiPresenting) { _uiDismissAfterPresent = YES; return; }   /* zamkniemy zaraz po otwarciu */
     _ui = nil;
-    if (u) [u dismissViewControllerAnimated:YES completion:nil];
+    _uiDismissing = YES;
+    [u dismissViewControllerAnimated:YES completion:^{
+        _uiDismissing = NO;
+        if (_state != ACCallIdle) [self presentUI];                 /* w międzyczasie zaczęła się nowa rozmowa */
+    }];
 }
 
 - (void)startRing

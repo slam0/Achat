@@ -678,6 +678,8 @@ struct acg {
     uint32_t cap_total, play_total, n_dec_ok, n_dec_err, n_rtp_badpt, n_rtp_badssrc;   /* diagnostyka dźwięku */
     int cap_peak, play_peak, dec_last_err;
     uint32_t n_msg_t[12], n_rtp_bad;
+    uint32_t rt_sr, rt_rr, rt_cc, rt_fb, rt_ps, rt_oth, rt_sr_pkts, rt_rr_lost;   /* zawartość RTCP od rozmówcy */
+    int peer_ms;                                                              /* surowy bajt RemoteMediaState */
     int remote_ids[16], n_remote_ids;
 };
 
@@ -881,6 +883,7 @@ static void on_message(void *ud, int sig, int type, const uint8_t *body, int ble
     case MSG_MEDIA_STATE:
         if (blen >= 1) {
             int pm = (body[0] & 1) ? 0 : 1;
+            g->peer_ms = body[0];
             if (pm != g->peer_muted) { g->peer_muted = pm; logf_("rozmowca: wyciszony=%d", pm); }
         }
         break;
@@ -1060,13 +1063,29 @@ static void jb_put(acg *g, int32_t pts, const uint8_t *d, int len, uint32_t arr)
     pthread_mutex_unlock(&g->jb_mx);
 }
 
+/* RTCP od rozmówcy: liczymy rodzaje pakietów (SR = on faktycznie coś nadaje, RR, TWCC...) */
+static void rtcp_stats(acg *g, const uint8_t *d, int n)
+{
+    int o = 0;
+    while (o + 4 <= n) {
+        int pt = d[o + 1], fmt = d[o] & 31, len = 4 * ((int)rbe16(d + o + 2) + 1);
+        if (len < 4 || o + len > n) break;
+        if (pt == 200) { g->rt_sr++; if (len >= 28) g->rt_sr_pkts = rbe32(d + o + 20); }
+        else if (pt == 201) { g->rt_rr++; if (len >= 32) g->rt_rr_lost = rbe32(d + o + 12) & 0xffffff; }
+        else if (pt == 205) { if (fmt == 15) g->rt_cc++; else g->rt_fb++; }
+        else if (pt == 206) g->rt_ps++;
+        else g->rt_oth++;
+        o += len;
+    }
+}
+
 static void handle_rtp(acg *g, const uint8_t *d, int n)
 {
     int cc, off, pad = 0, pt, tseq = -1;
     uint32_t ts, ssrc;
     uint32_t now = now_ms(g);
     if (n < 12 || (d[0] & 0xC0) != 0x80) { g->n_rtp_bad++; return; }
-    if (d[1] >= 192 && d[1] <= 223) { g->n_rtcp_rx++; return; }          /* RTCP: ignorujemy */
+    if (d[1] >= 192 && d[1] <= 223) { g->n_rtcp_rx++; rtcp_stats(g, d, n); return; }    /* RTCP: tylko liczymy, co zawiera */
     pt = d[1] & 0x7f;
     cc = d[0] & 0x0f;
     off = 12 + 4 * cc;
@@ -1644,10 +1663,11 @@ void acg_short2(acg *g, char *out, int outlen)
     if (g->sel >= 0) { sel_resp = g->pairs[g->sel].got_resp; sel_req = g->pairs[g->sel].got_req; sel_nom = g->pairs[g->sel].nominated; }
     cands = (int)g->n_cand_rx;
     snprintf(out, (size_t)outlen,
-             "STUN wys %u zad %u odp %u zle %u\nDGM %u pakiet %u nierozsz %u zlehash %u rtcp %u rtp-zle %u\nMSG %s\npara %d odp %d zad %d nom %d kand %d",
+             "STUN wys %u zad %u odp %u zle %u\nDGM %u pakiet %u nierozsz %u zlehash %u rtcp %u rtp-zle %u\nMSG %s\nRTCP SR %u RR %u CC %u fb %u ps %u inne %u · SR-pak %u · stan %d\npara %d odp %d zad %d nom %d kand %d",
              (unsigned)g->n_stun_tx, (unsigned)g->n_stun_req_rx, (unsigned)g->n_stun_resp_rx, (unsigned)g->n_stun_bad,
              (unsigned)g->n_dgram_rx, (unsigned)g->n_ec_rx, (unsigned)g->n_ec_unk, (unsigned)g->ec_t_.n_bad_hash, (unsigned)g->n_rtcp_rx, (unsigned)g->n_rtp_bad,
-             msg, g->sel, sel_resp, sel_req, sel_nom, cands);
+             msg, (unsigned)g->rt_sr, (unsigned)g->rt_rr, (unsigned)g->rt_cc, (unsigned)g->rt_fb, (unsigned)g->rt_ps, (unsigned)g->rt_oth, (unsigned)g->rt_sr_pkts, g->peer_ms,
+             g->sel, sel_resp, sel_req, sel_nom, cands);
 }
 
 /* krótka linia na ekran rozmowy: pakiety wysłane/odebrane, poziom mikrofonu i głośnika (szczyty od ostatniego odczytu) */
