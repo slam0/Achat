@@ -145,9 +145,11 @@ static NSString *JSONText(id o)
         NSString *t = [NSString stringWithFormat:@"%d:%02d", sec / 60, sec % 60];
         if (_peerMuted) t = [t stringByAppendingString:@" · rozmówca wyciszony"];
         if (_engine) {     /* linia diagnostyczna: pakiety wysłane/odebrane, poziomy mikrofonu i głośnika */
-            char d[160];
+            char d[160], d2[400];
             acg_short(_engine, d, sizeof(d));
+            acg_short2(_engine, d2, sizeof(d2));
             t = [t stringByAppendingString:[@"\n" stringByAppendingString:[NSString stringWithUTF8String:d] ?: @""]];
+            t = [t stringByAppendingString:[@"\n" stringByAppendingString:[NSString stringWithUTF8String:d2] ?: @""]];
         }
         return t;
     }

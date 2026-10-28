@@ -58,7 +58,7 @@
     _status = [self labelWithSize:17 bold:NO y:236];
     _status.numberOfLines = 0;                         /* komunikaty o błędach bywają długie */
     _status.adjustsFontSizeToFitWidth = NO;
-    _status.frame = CGRectMake(16, 236, b.size.width - 32, 100);
+    _status.frame = CGRectMake(16, 236, b.size.width - 32, 110);
     _status.lineBreakMode = NSLineBreakByWordWrapping;
     _status.textAlignment = NSTextAlignmentCenter;
     _status.textColor = ACP()->metal || ACP()->classic ? ACSubtleColor() : [UIColor colorWithWhite:1.0f alpha:0.9f];
@@ -106,6 +106,7 @@
     _name.text = nm;
     if (![nm isEqualToString:_avatarName]) { _avatarName = nm; _avatar.image = ACAvatarImage(nm, 120); }
     _status.text = c.statusText;
+    _status.font = [UIFont systemFontOfSize:[c.statusText rangeOfString:@"\n"].location != NSNotFound ? 12.0f : 17.0f];     /* linie diagnostyczne są drobniejsze */
     BOOL incoming = c.state == ACCallIncoming;
     BOOL ended = c.state == ACCallEnded || c.state == ACCallIdle;
     _accept.hidden = !incoming;

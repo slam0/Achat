@@ -676,6 +676,7 @@ struct acg {
     uint32_t n_dgram_rx, n_dgram_tx, n_lost;
     uint32_t cap_total, play_total, n_dec_ok, n_dec_err, n_rtp_badpt, n_rtp_badssrc;   /* diagnostyka dźwięku */
     int cap_peak, play_peak, dec_last_err;
+    uint32_t n_msg_t[12], n_rtp_bad;
     int remote_ids[16], n_remote_ids;
 };
 
@@ -873,6 +874,7 @@ static void handle_rtp(acg *g, const uint8_t *d, int n);
 static void on_message(void *ud, int sig, int type, const uint8_t *body, int blen)
 {
     acg *g = (acg *)ud;
+    if (!sig && type >= 1 && type <= 10) g->n_msg_t[type]++;
     switch (type) {
     case MSG_CANDIDATES: handle_candidates(g, body, blen); break;
     case MSG_MEDIA_STATE:
@@ -1062,15 +1064,14 @@ static void handle_rtp(acg *g, const uint8_t *d, int n)
     int cc, off, pad = 0, pt, tseq = -1;
     uint32_t ts, ssrc;
     uint32_t now = now_ms(g);
-    if (n < 12) return;
-    if ((d[0] & 0xC0) != 0x80) return;
+    if (n < 12 || (d[0] & 0xC0) != 0x80) { g->n_rtp_bad++; return; }
     if (d[1] >= 192 && d[1] <= 223) { g->n_rtcp_rx++; return; }          /* RTCP: ignorujemy */
     pt = d[1] & 0x7f;
     cc = d[0] & 0x0f;
     off = 12 + 4 * cc;
     if (d[0] & 0x10) {
         int el;
-        if (n < off + 4) return;
+        if (n < off + 4) { g->n_rtp_bad++; return; }
         el = (int)rbe16(d + off + 2);
         if (n >= off + 4 + 4 * el && rbe16(d + off) == 0xBEDE) {            /* rozszerzenia jednobajtowe */
             int q = off + 4, qe = off + 4 + 4 * el;
@@ -1085,7 +1086,7 @@ static void handle_rtp(acg *g, const uint8_t *d, int n)
         off += 4 + 4 * el;
     }
     if (d[0] & 0x20) pad = d[n - 1];
-    if (off + pad >= n) return;
+    if (off + pad >= n) { g->n_rtp_bad++; return; }
     ssrc = rbe32(d + 8);
     ts = rbe32(d + 4);
     if (pt != RTP_PT_OPUS) { g->n_rtp_badpt++; if (g->n_rtp_badpt <= 3) logf_("RTP: nieoczekiwany typ ladunku %d", pt); return; }
@@ -1621,6 +1622,23 @@ void acg_describe(acg *g, char *out, int outlen)
         if ((int)l < outlen - 1) snprintf(out + l, (size_t)outlen - l, ", mik %u pr / szczyt %d, glosnik %u pr / szczyt %d, dekod ok %u blad %u (%d), zly-pt %u zly-ssrc %u, zgubione %u",
                  (unsigned)g->cap_total, g->cap_peak, (unsigned)g->play_total, g->play_peak, (unsigned)g->n_dec_ok, (unsigned)g->n_dec_err, g->dec_last_err, (unsigned)g->n_rtp_badpt, (unsigned)g->n_rtp_badssrc, (unsigned)g->n_lost);
     }
+}
+
+/* dodatkowe linie diagnostyczne: ICE/STUN, pakiety transportu, typy wiadomości, wybrana para */
+void acg_short2(acg *g, char *out, int outlen)
+{
+    char msg[80];
+    int i, o = 0, sel_resp = -1, sel_req = -1, sel_nom = -1, cands = 0;
+    if (!g) { snprintf(out, (size_t)outlen, "-"); return; }
+    msg[0] = 0;
+    for (i = 1; i <= 10 && o < 60; i++) if (g->n_msg_t[i]) o += snprintf(msg + o, sizeof(msg) - (size_t)o, "%d:%u ", i, (unsigned)g->n_msg_t[i]);
+    if (g->sel >= 0) { sel_resp = g->pairs[g->sel].got_resp; sel_req = g->pairs[g->sel].got_req; sel_nom = g->pairs[g->sel].nominated; }
+    cands = (int)g->n_cand_rx;
+    snprintf(out, (size_t)outlen,
+             "STUN wys %u zad %u odp %u zle %u\nDGM %u pakiet %u nierozsz %u zlehash %u rtcp %u rtp-zle %u\nMSG %s\npara %d odp %d zad %d nom %d kand %d",
+             (unsigned)g->n_stun_tx, (unsigned)g->n_stun_req_rx, (unsigned)g->n_stun_resp_rx, (unsigned)g->n_stun_bad,
+             (unsigned)g->n_dgram_rx, (unsigned)g->n_ec_rx, (unsigned)g->n_ec_unk, (unsigned)g->ec_t_.n_bad_hash, (unsigned)g->n_rtcp_rx, (unsigned)g->n_rtp_bad,
+             msg, g->sel, sel_resp, sel_req, sel_nom, cands);
 }
 
 /* krótka linia na ekran rozmowy: pakiety wysłane/odebrane, poziom mikrofonu i głośnika (szczyty od ostatniego odczytu) */

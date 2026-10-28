@@ -1,10 +1,9 @@
-AeroChat 0.7.1 - poprawka (linia diagnostyczna dźwięku na ekranie rozmowy)
+AeroChat 0.7.2 - więcej diagnostyki na ekranie rozmowy
 
 Wgraj tak samo jak poprzednio: pliki z głównego folderu do głównego folderu repo (nadpisz),
 Resources/Info.plist do folderu Resources. Potem Actions -> "Zbuduj AeroChat" -> Run workflow.
-(Makefile i reszta plików bez zmian względem 0.7.0.)
+Zainstaluj nowe .deb na KAŻDYM telefonie z AeroChat (4S, 5, 4...).
 
-Co zrobić po instalacji: zadzwoń, poczekaj kilkanaście sekund, mów do telefonu i zrób zdjęcie/zrzut ekranu
-(przycisk Home + Power) ekranu rozmowy. Pod licznikiem będzie linia:
-  wys N odb N · mik N · gł N · dek N/N
-Wyślij mi ją (albo zrzut ekranu) i napisz, kto kogo słyszy.
+Po zainstalowaniu: zadzwoń na oficjalnego Telegrama (iPhone 14 / SE 3), poczekaj ~15 s, zrób zrzut ekranu
+ekranu rozmowy (Home + Power) i wyślij mi. Napisz też, co pokazuje w tym czasie drugi telefon
+(np. "Łączenie...", licznik czasu, albo rozmowa się rozłączyła).

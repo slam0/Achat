@@ -1,4 +1,4 @@
-# AeroChat 0.7.1 (klient Telegrama, załączniki, rozmowy głosowe)
+# AeroChat 0.7.2 (klient Telegrama, załączniki, rozmowy głosowe)
 
 Klient komunikatora w stylu iOS 6 dla jailbreakowanego iPhone'a (armv7). Łączy się z Telegramem
 własnym, napisanym od zera klientem MTProto 2.0 (oficjalnie dozwolone klienty firm trzecich).
