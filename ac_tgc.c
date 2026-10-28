@@ -660,6 +660,7 @@ struct acg {
     int rtp_have_first;
     uint32_t rtp_first_ts;
     uint16_t out_seq;
+    uint16_t out_twseq;                       /* numer transport-wide-cc (rozszerzenie RTP id 1) */
     uint32_t out_ts, out_ssrc, in_ssrc;
     int out_marker;
     uint32_t last_audio_media_ms, last_ice_ms;
@@ -1176,16 +1177,24 @@ static void send_rtp(acg *g, const uint8_t *opus, int n, uint32_t now)
     uint8_t rtp[MAX_PKT], out[MAX_PKT + 64];
     int len;
     if (g->sel < 0 || n <= 0 || n > 1200) return;
-    rtp[0] = 0x80;
+    /* jak prawdziwy tgcalls: nagłówek RTP z rozszerzeniem transport-wide-cc (id 1, 2 bajty) —
+       dzięki niemu rozmówca odsyła raporty zwrotne (TWCC), a my widzimy, że odbiera nasz dźwięk */
+    rtp[0] = 0x90;
     rtp[1] = (uint8_t)(RTP_PT_OPUS | (g->out_marker ? 0x80 : 0));
     g->out_marker = 0;
     wbe16(rtp + 2, g->out_seq);
     wbe32(rtp + 4, g->out_ts);
     wbe32(rtp + 8, g->out_ssrc);
-    memcpy(rtp + 12, opus, (size_t)n);
+    rtp[12] = 0xBE; rtp[13] = 0xDE; rtp[14] = 0; rtp[15] = 1;          /* profil jednobajtowy, 1 słowo */
+    rtp[16] = 0x11;                                                   /* id 1, długość 2 bajty */
+    rtp[17] = (uint8_t)(g->out_twseq >> 8);
+    rtp[18] = (uint8_t)(g->out_twseq & 0xff);
+    rtp[19] = 0;
+    memcpy(rtp + 20, opus, (size_t)n);
     g->out_seq++;
+    g->out_twseq++;
     g->out_ts += (uint32_t)(FRAME_MS * 48);
-    len = ec_send_data(&g->ec_t_, MSG_AUDIO, rtp, 12 + n, out, now);
+    len = ec_send_data(&g->ec_t_, MSG_AUDIO, rtp, 20 + n, out, now);
     if (len > 0) { refl_send(g, g->pairs[g->sel].port, g->pairs[g->sel].rtag, out, len); g->n_rtp_tx++; }
 }
 
